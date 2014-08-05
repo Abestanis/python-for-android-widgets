@@ -30,7 +30,6 @@ import android.opengl.Matrix;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.util.Log;
 import android.view.SurfaceHolder;
@@ -618,13 +617,6 @@ public class SDLSurfaceView extends SurfaceView implements SurfaceHolder.Callbac
         }
     }
 
-    public static void storeWidgetData(String data) {
-    	Log.i("PythonWidgets", "Storing data: " + data);
-    	SharedPreferences widgetData = mActivity.getSharedPreferences("PythonWidgetData", 0);
-        SharedPreferences.Editor editor = widgetData.edit();
-        editor.putString("data", data);
-        editor.commit();
-    }
 
     public void run() {
         mEgl = (EGL10) EGLContext.getEGL();
