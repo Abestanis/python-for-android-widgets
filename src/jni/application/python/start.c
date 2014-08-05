@@ -13,6 +13,7 @@
 #include "jniwrapperstuff.h"
 
 #define LOG(x) __android_log_write(ANDROID_LOG_INFO, "python", (x))
+#define msgassert(x, message) { if (!x) { __android_log_print(ANDROID_LOG_ERROR, "android_jni", "Assertion failed: %s. %s:%d", message, __FILE__, __LINE__); abort(); }}
 
 static PyObject *androidembed_log(PyObject *self, PyObject *args) {
     char *logstr = NULL;
@@ -43,8 +44,97 @@ int file_exists(const char * filename)
     return 0;
 }
 
-int main(int argc, char **argv) {
 
+
+
+
+
+
+JNIEnv *SDL_ANDROID_GetJNIEnv(void);
+
+static PyObject *PythonWidgets_storeWidgetData(PyObject *self, PyObject *args) {
+    LOG("C: PythonWidgets_storeWidgetData is getting called...");
+    
+    static JNIEnv *env   = NULL;
+    static jclass *cls   = NULL;
+    static jmethodID mid = NULL;
+    const char* data_str = NULL;
+    jstring arg          = NULL;
+    PyObject* data       = NULL;
+    
+    PyObject* data_dict;
+    PyArg_ParseTuple(args, "O", &data_dict);
+    
+    if (env == NULL) {
+        LOG("Trying to get env pointer.");
+        env = SDL_ANDROID_GetJNIEnv();
+        msgassert(env, "Could not obtain the current environment!");
+        cls = (*env)->FindClass(env, "org/renpy/android/SDLSurfaceView");
+        msgassert(cls, "Could not get a reference from class 'org/renpy/android/SDLSurfaceView'!");
+        mid = (*env)->GetStaticMethodID(env, cls, "storeWidgetData", "(Ljava/lang/String;)V");
+        msgassert(mid, "Could not find the function 'storeWidgetData' in the Android class!");
+    }
+    
+    LOG("C: Converting given data to string...");
+    
+    if (PyDict_Check(data_dict)) {
+        LOG("C: Importing urllib...");
+        PyObject* urllib = PyImport_ImportModuleNoBlock("urllib");
+        if (urllib == NULL) {
+            LOG("C: Could not import urllib!");
+            PyErr_Print();
+            Py_RETURN_FALSE;
+        }
+        LOG("C: Done. Calling urlencode...");
+        data = PyObject_CallMethod(urllib, "urlencode", "O", data_dict);
+        if (data == NULL) {
+            LOG("C: urlencode failed!");
+            PyErr_Print();
+            Py_RETURN_FALSE;
+        }
+        LOG("C: Done.");
+        Py_DECREF(urllib);
+        
+        
+    } else {
+        LOG("C: Given data is not a dict!");
+        Py_RETURN_FALSE;
+    }
+    
+    
+    LOG("C: Converting Python string to c...");
+    data_str = PyString_AsString(data);
+    if (data_str == NULL) {
+        LOG("C: (storeWidgetData) Failed to extract the data_string from the arguments!");
+        PyErr_Print();
+        Py_RETURN_FALSE;
+    }
+    LOG("C: Done.");
+    if (data_str == NULL) {
+        LOG("C: Given data is null.");
+        arg = NULL;
+    } else {
+        LOG(data_str);
+        LOG("C: Converting C string to java string...");
+        arg = (*env)->NewStringUTF(env, data_str);
+        LOG("C: Done.");
+    }
+    
+    LOG("C: Calling java function storeWidgetData...");
+    (*env)->CallStaticVoidMethod(env, cls, mid, arg);
+    LOG("C: back from Java, returning to Python...");
+    Py_RETURN_TRUE;
+}
+
+static PyMethodDef module_methods[] = {
+    { "storeWidgetData", PythonWidgets_storeWidgetData, METH_VARARGS, "Stores the given dict data and makes it accesabele for the widgets." },
+    { NULL, NULL, 0, NULL }
+};
+
+
+
+int main(int argc, char **argv) {
+    
     char *env_argument = NULL;
     int ret = 0;
     FILE *fd;
@@ -52,11 +142,13 @@ int main(int argc, char **argv) {
     LOG("Initialize Python for Android");
     env_argument = getenv("ANDROID_ARGUMENT");
     setenv("ANDROID_APP_PATH", env_argument, 1);
+    LOG("ANDROID_APP_PATH");
+    LOG(env_argument);
 	//setenv("PYTHONVERBOSE", "2", 1);
     Py_SetProgramName(argv[0]);
     Py_Initialize();
+    
     PySys_SetArgv(argc, argv);
-
     /* ensure threads will work.
      */
     PyEval_InitThreads();
@@ -64,6 +156,8 @@ int main(int argc, char **argv) {
     /* our logging module for android
      */
     initandroidembed();
+    
+    (void) Py_InitModule3("PythonWidgets", module_methods, "This module provides interaction between your python code and your Widgets.");
 
     /* inject our bootstrap code to redirect python stdin/stdout
      * replace sys.path with our path
@@ -92,6 +186,8 @@ int main(int argc, char **argv) {
         "        return\n" \
         "sys.stdout = sys.stderr = LogFile()\n" \
 		"import site; print site.getsitepackages()\n"\
+		"print 'ANDROID_PRIVATE', private\n" \
+		"print 'ANDROID_ARGUMENT', argument\n" \
 		"print 'Android path', sys.path\n" \
         "print 'Android kivy bootstrap done. __name__ is', __name__");
 
