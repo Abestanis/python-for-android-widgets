@@ -1,3 +1,9 @@
+# Licensed under the MIT license
+# http://opensource.org/licenses/mit-license.php
+
+# Copyright 2014 Sebastian Scholz <abestanis.gc@gmail.com> 
+
+
 print('[Debug] Trying to import my module...')
 import PythonWidgets
 print('[Debug] Success!')

@@ -1,5 +1,12 @@
 package org.renpy.android;
 
+/*
+ * Licensed under the MIT license
+ * http://opensource.org/licenses/mit-license.php
+ *
+ * Copyright 2014 Sebastian Scholz <abestanis.gc@gmail.com> 
+ */
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;

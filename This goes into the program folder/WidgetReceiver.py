@@ -1,3 +1,9 @@
+# Licensed under the MIT license
+# http://opensource.org/licenses/mit-license.php
+
+# Copyright 2014 Sebastian Scholz <abestanis.gc@gmail.com> 
+
+
 # This file is an example for the WidgetReceiver.py, which has to be in the programs directory
 
 import AndroidWidgets

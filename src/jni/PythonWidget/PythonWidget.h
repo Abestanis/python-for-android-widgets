@@ -1,3 +1,14 @@
+/*
+ * PythonWidget.h
+ *
+ *  Created on: 18.06.2014
+ *  Licensed under the MIT license
+ *  http://opensource.org/licenses/mit-license.php
+ *
+ *  Copyright 2014 Sebastian Scholz <abestanis.gc@gmail.com> 
+ */
+
+
 // Java jni part //
 
 #include <jni.h>
