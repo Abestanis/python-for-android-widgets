@@ -66,3 +66,91 @@ if you get the following message:
 a solution is to remove the "awk" binary in the android ndk distribution
 
     rm $ANDROIDNDK/prebuilt/linux-x86/bin/awk
+
+
+Widgets
+-------
+
+For now, your application will provide one widget type, weather you want more or none at all.
+This will be changeable in the future.
+
+If you want to interact with your widgets, you need a 'WidgetReceiver.py' file in your program directory which should be structured as follows:
+
+.. code-block:: python
+
+  class WidgetReceiver(object):
+      '''This class is the central interface between the python code
+      and the widgets. All events occurring for the widget will get
+      passed down to the corresponding functions in this class.'''
+      
+      def __init__(self):
+          '''This function is called whenever a widget gets initialized,
+          no other widgets are present and before 'initWidget' is called.
+          You can use this function to get some data required for all your
+          widgets or to set the default loading and error view.'''
+          pass
+      
+      def initWidget(self, widget):
+          '''This function will initialize the given widget 'widget'
+          and will set it's visual appearance. If this function
+          returns False, the initialisation is considered as failed
+          and an error view is displayed.'''
+          return True
+      
+      def updateWidget(self, widget:
+          '''This function gets called every time the android AlarmManager
+          schedules an update.'''
+          pass
+      
+      def destroyWidget(self, widget):
+          '''This function is called if the user deletes a widget from
+          the home screen.'''
+          pass
+
+An example is provided `here`_.
+
+
+Every widget has an id and a canvas. The canvas is used to define the widgets look.
+Just add a CanvasObject (aka. view) to the canvas and push the change to the screen:
+
+.. code-block:: python
+
+  widget.canvas.add(view)
+  widget.update() # Don't forget this!
+
+Due to android `limitations`_, only a few view types are allowed on the canvas:
+
+- Layouts
+ - LinearLayout
+ - FrameLayout
+ - RelativeLayout
+ - GridLayout
+- Views
+ - TextView
+ - AnalogClock
+ - Button
+ - Chronometer
+ - ImageButton
+ - ImageView
+ - ProgressBar
+ - ViewFlipper
+ - ListView
+ - GridView
+ - StackView
+ - AdapterViewFlipper
+ - ViewStub
+
+You can get a new CanvasObject from every other CanvasObject or a canvas itself:
+
+.. code-block:: python
+
+  textview1 = widget.canvas.TextView(text = 'Hello world!')
+  textview2 = textview1.TextView(text = 'How are you?')
+
+
+For more information about the canvas system look at `AndroidWidgets.py`_.
+
+
+.. _here: https://github.com/Abestanis/python-for-android-widgets/blob/master/This%20goes%20into%20the%20program%20folder/WidgetReceiver.py
+.. _limitations: http://developer.android.com/guide/topics/appwidgets/index.html#CreatingLayout
+.. _AndroidWidgets.py: https://github.com/Abestanis/python-for-android-widgets/blob/master/This%20goes%20into%20the%20program%20folder/AndroidWidgets.py
