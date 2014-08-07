@@ -71,7 +71,7 @@ a solution is to remove the "awk" binary in the android ndk distribution
 Widgets
 -------
 
-For now, your application will provide one widget type, weather you want more or none at all.
+For now, your application will provide one widget type, whether you want more or none at all.
 This will be changeable in the future.
 
 If you want to interact with your widgets, you need a 'WidgetReceiver.py' file in your program directory which should be structured as follows:
