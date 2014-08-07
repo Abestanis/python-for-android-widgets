@@ -226,7 +226,7 @@ public class PythonWidgetProvider extends AppWidgetProvider {
 	    		Log.w(TAG, "Got Widget_input event with no Action set!");
 	    	} else {
 	    		// Start Python function
-	    		Log.i(TAG, "Calling Python function" + updateAction + ".");
+	    		Log.i(TAG, "Calling Python function " + updateAction + ".");
 	    		nativePythonCallback(intent.getIntExtra("WidgetId", -1), updateAction);
 	    	}
 	    }

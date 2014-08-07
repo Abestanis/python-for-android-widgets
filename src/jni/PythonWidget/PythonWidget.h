@@ -93,6 +93,7 @@ static PyObject *PythonWidgets_setDfltErrView(PyObject *self, PyObject *args);
 static PyObject *PythonWidgets_getDfltLoadView(PyObject *self, PyObject *args);
 static PyObject *PythonWidgets_setDfltLoadView(PyObject *self, PyObject *args);
 static PyObject *PythonWidgets_getWidgetData(PyObject *self, PyObject *args);
+static PyObject *PythonWidgets_addOnClickCallb(PyObject *self, PyObject *args);
 
 PyMODINIT_FUNC initPythonWidgets(void);
 

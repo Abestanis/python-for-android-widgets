@@ -75,7 +75,7 @@ class WidgetReceiver(object):
         #    'image_path': 'path/to/image'
         #}
         #
-        # If we cant obtain the path, we are setting it to a default (... + '\images\test.jpg').
+        # If we can't obtain the path, we are setting it to a default (... + '\images\test.jpg').
         source = None
         if type(data) == dict:
             print('[Debug] Returned data: ' + str(data))

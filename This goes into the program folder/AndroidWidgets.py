@@ -122,7 +122,10 @@ class CanvasBase(object):
         '''This is used to initialize a CanvasObject arguments
         all at once.'''
         for key, value in kwargs.iteritems():
-            if callable(value):
+            if key == 'on_click' and callable(value):
+                PythonWidgets.addOnClick(str(id(self)), value)
+                kwargs[key] = id(self)
+            elif callable(value):
                 kwargs[key] = value.__name__
         self._args = urlencode(kwargs)
         return self
@@ -141,6 +144,9 @@ class CanvasBase(object):
             self._args = tmp + self._args[end + 1:]
         if self._args != '':
             self._args = self._args + '&'
+        if name == 'on_click' and callable(value):
+            PythonWidgets.addOnClick(str(id(self)), value)
+            value = id(self)
         if callable(value):
             value = value.__name__
         self._args = self._args + urlencode({name: value})
@@ -161,6 +167,10 @@ class CanvasBase(object):
         if not child._repr:
             print('Given child is a Canvas...')
             while not child._repr:
+                if len(child) == 0:
+                    # No need to add an empty canvas
+                    print('[Debug] Given canvas is empty.')
+                    return True
                 child = child.children[0]
         if index and type(index) != int:
             print('[Warn ] addView was called with a non numeric index: ' + str(index))

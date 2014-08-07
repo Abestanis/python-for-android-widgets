@@ -45,6 +45,7 @@ static JavaVM *Jvm              = NULL;
 jobject _PyWidgetClass          = NULL;
 PyObject* _androidWidgetsModule = NULL;
 static PyObject* _widgetsList   = NULL;
+static PyObject* _callbackList  = NULL;
 static int INIT_SUCCESS         = 0;
 
 
@@ -139,6 +140,11 @@ JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativeinit(JN
         LOGW("C: Initializing Widget cache...");
         _widgetsList = PyDict_New();
     }
+    // Setting up callback storage
+    if (_callbackList == NULL) {
+        LOGW("C: Initializing callback storage...");
+        _callbackList = PyDict_New();
+    }
     
     // Setting up ne needet modules
     LOGW("C: Initializing PythonWidget modules...");
@@ -206,6 +212,7 @@ JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativeend(JNI
     LOGW("C: Cleanup PythonWidgets...");
     LOGW("C: Closing Python...");
     PyDict_Clear(_widgetsList);
+    PyDict_Clear(_callbackList);
     _PyWidgetClass = NULL;
     if (wrInstance != NULL) {
 	Py_DECREF(wrInstance);
@@ -312,34 +319,38 @@ JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativedestroy
     return;
 }
 
-JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativePythonCallback(JNIEnv* env, jobject obj, jint WidgetId, jstring jPyFuncName) {
+JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativePythonCallback(JNIEnv* env, jobject obj, jint WidgetId, jstring jPyFuncId) {
     LOGW("C: Calling python callback function...");
     if (!INIT_SUCCESS) {LOGW("C: PythonWidget is not correctly initialized!"); return;}
     _PyWidgetClass = obj;
     PyEval_InitThreads();
     LOGW("C: Converting given java string to c string...");
-    const char* PyFuncName = (*env)->GetStringUTFChars(env, jPyFuncName, 0);
-    LOGW("C: Done. Function name is:");
-    LOGW(PyFuncName);
-    if ((wrInstance != NULL) && (PyObject_HasAttrString(wrInstance, PyFuncName) == 1)) {
+    const char* CPyFuncId = (*env)->GetStringUTFChars(env, jPyFuncId, 0);
+    LOGW("C: Done. Function id is:");
+    LOGW(CPyFuncId);
+    LOGW("C: Converting c string to python string...");
+    PyObject* PyFuncId = Py_BuildValue("s", CPyFuncId);
+    LOGW("C: Done.");
+    if (PyDict_Check(_callbackList) && PyDict_Contains(_callbackList, PyFuncId)) {
         PyObject* widget = PyDict_GetItem(_widgetsList, Py_BuildValue("i", WidgetId));
-        if (widget == NULL) {
-           LOGW("C: Did not found the widget in the cache!");
-            return; 
+        if (widget != NULL) {
+            PyObject *res = PyObject_Call(PyDict_GetItem(_callbackList, PyFuncId), Py_BuildValue("()"), Py_BuildValue("{sO}", "widget", widget));
+            if (res != NULL) {
+                (*env)->ReleaseStringUTFChars(env, jPyFuncId, CPyFuncId);
+                _PyWidgetClass = NULL;
+                LOGW("C: Sucessfully executed python callback.");
+                return;
+            }
+            LOGW("C: Failed to execute python callback!");
+            PyErr_Print();
+        } else {
+            LOGW("C: Did not found the widget in the cache!");
         }
-        PyObject *res = PyObject_Call(PyObject_GetAttrString(wrInstance, PyFuncName), Py_BuildValue("()"), Py_BuildValue("{sO}", "widget", widget));
-        if (res != NULL) {
-            _PyWidgetClass = NULL;
-            LOGW("C: Sucessfully executed python callback.");
-            return;
-        }
-        LOGW("C: Failed to execute python callback!");
-        PyErr_Print();
     } else {
-        LOGW("C: Failed. Our WidgetProvider instance has no function named:");
-        LOGW(PyFuncName);
+        LOGW("C: Failed. No callback found for id:");
+        LOGW(CPyFuncId);
     }
-    (*env)->ReleaseStringUTFChars(env, jPyFuncName, PyFuncName);
+    (*env)->ReleaseStringUTFChars(env, jPyFuncId, CPyFuncId);
     _PyWidgetClass = NULL;
     return;
 }
@@ -727,6 +738,46 @@ static PyObject *PythonWidgets_getWidgetData(PyObject *self, PyObject *args) {
     }
 }
 
+static PyObject *PythonWidgets_addOnClickCallb(PyObject *self, PyObject *args) {
+    LOGW("C: PythonWidgets_addOnClickCallb is getting called...");
+    
+    static JNIEnv *env   = NULL;
+    static jclass *cls   = NULL;
+    static jmethodID mid = NULL;
+    PyObject *id         = NULL;
+    PyObject *callback   = NULL;
+    
+    if (env == NULL) {
+        LOGW("Trying to get env pointer.");
+        env = GetJNIEnv();
+        msgassert(env, "Could not obtain the current environment!");
+        cls = (*env)->GetObjectClass(env, _PyWidgetClass);
+        msgassert(cls, "Could not get a instance from class 'org/renpy/android/PythonWidgetProvider'!");
+        mid = (*env)->GetMethodID(env, cls, "getWidgetData", "()Ljava/lang/String;");
+        msgassert(mid, "Could not find the function 'getWidgetData' in the Android class!");
+    }
+    
+    if (!PyArg_ParseTuple(args, "OO", &id, &callback)) {
+        LOGW("C: Could not extract the id and the callback from the given arguments!");
+        PyErr_Print();
+        Py_RETURN_FALSE;
+    }
+    
+    if (!PyDict_Check(_callbackList)) {
+        LOGW("C: Adding callback to callback-list failed: Callback-list is not a list (maybe uninitialized)!");
+        Py_RETURN_FALSE;
+    }
+    
+    if (PyDict_SetItem(_callbackList, id, callback) == -1) {
+        LOGW("C: Adding callback to callback-list failed!");
+        PyErr_Print();
+        Py_RETURN_FALSE;
+    }
+    
+    LOGW("C: Successfully added callback to callback-list.");
+    Py_RETURN_TRUE;
+}
+
 static PyMethodDef module_methods[] = {
     { "updateWidget",        PythonWidgets_updateWidget,    METH_VARARGS, "Updates the widget with the id 'widget_Id' using the view 'widgetview'.\nYou need to call this function in order to make your\nchanges to the widgets graphics visible on the screen." },
     { "existWidget",         PythonWidgets_existWidget,     METH_VARARGS, "Check's if a widget with the id 'widget_Id' was allready registered." },
@@ -735,6 +786,7 @@ static PyMethodDef module_methods[] = {
     { "getDefaultLoadView",  PythonWidgets_getDfltLoadView, METH_NOARGS,  "Returns the default loading view that is shown during\nthe initialisation of an widget or None if None is set." },
     { "setDefaultLoadView",  PythonWidgets_setDfltLoadView, METH_VARARGS, "Sets the default loading view that is shown\nduring the initialisation of an widget." },
     { "getWidgetData",       PythonWidgets_getWidgetData,   METH_NOARGS, "Returns the data as a urlencoded string,\nthat was passed to 'storeWidgetData' in the main App or None,\nif there is no data stored." },
+    { "addOnClick",          PythonWidgets_addOnClickCallb, METH_VARARGS, "Adds the given callback 'callback' to the identifier 'id'." },
     /*{ "", (PyCFunction)module_func, METH_NOARGS, "" },*/
     { NULL, NULL, 0, NULL }
 };
