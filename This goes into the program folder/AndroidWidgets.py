@@ -167,7 +167,7 @@ class CanvasBase(object):
         if not child._repr:
             print('Given child is a Canvas...')
             while not child._repr:
-                if len(child) == 0:
+                if len(child.children) == 0:
                     # No need to add an empty canvas
                     print('[Debug] Given canvas is empty.')
                     return True

@@ -60,7 +60,13 @@ public class WidgetView {
         
         VIEWS.put("UrlImageView", 		new int[] {R.layout.widget_imageview, 	   R.id.widget_imageview});
         
-    }
+	}
+	private static enum Args {
+		text,
+		on_click,
+		image_path,
+		image_url
+	}
 	public RemoteViews view = null;
 	public final int view_Id;
 
@@ -123,10 +129,13 @@ public class WidgetView {
 				}
 				Log.i(TAG, Arrays.toString(arg_val));
 				
-				if (arg_val[0].equals("text")) {
+				
+				switch (Args.valueOf(arg_val[0])) {
+				case text:
 					Log.i(TAG, "Setting TextView text to " + arg_val[1]);
 					this.view.setTextViewText(this.view_Id, arg_val[1]);
-				} else if (arg_val[0].equals("on_click")) { // Input
+					break;
+				case on_click:
 					Intent inputIntent = null;
 					PendingIntent pendingIntent = null;
 					Context context = PythonWidgetProvider.getWidgetContext();
@@ -143,7 +152,8 @@ public class WidgetView {
 						pendingIntent = PendingIntent.getBroadcast(context, 0, inputIntent, PendingIntent.FLAG_UPDATE_CURRENT);
 					}
 					this.view.setOnClickPendingIntent(this.view_Id, pendingIntent);
-				} else if (arg_val[0].equals("image_path")) {
+					break;
+				case image_path:
 					Log.i(TAG, "Setting image source to " + arg_val[1]);
 					Bitmap image = BitmapFactory.decodeFile(arg_val[1]);
 					if (image != null) {
@@ -152,22 +162,22 @@ public class WidgetView {
 						Log.e(TAG, "Failed loading the image located at the given path!");
 						// TODO: Set to missing Resource image?
 					}
-				} else if (arg_val[0].equals("image_url")) {
+					break;
+				case image_url:
 					Log.i(TAG, "Setting image url_source to " + arg_val[1]);
-					Bitmap image = DownloadImage(arg_val[1]);
-					if (image != null) {
-						this.view.setImageViewBitmap(this.view_Id, image);
+					Bitmap url_image = DownloadImage(arg_val[1]);
+					if (url_image != null) {
+						this.view.setImageViewBitmap(this.view_Id, url_image);
 					} else {
 						Log.e(TAG, "Failed loading the image located at the given path!");
 						// TODO: Set to missing Resource image?
 					}
-//				} else if (arg_val[0].equals("text_size")) {
-//					Log.i(TAG, "Setting TextView textsize to " + arg_val[1]);
-//					this.view.setTextViewTextSize(this.layout_Id, TypedValue.COMPLEX_UNIT_PX, Float.parseFloat(arg_val[1]));
-				} else if (arg_val[0].equals("Argument")) {
-					// TODO: Add more.
-				} else {
-					Log.w(TAG, "Got an unknown argument while initializing " + this._type + ": " + arg_val.toString());
+					break;
+//				case Argument:
+//					break;
+				default:
+					Log.w(TAG, "Got an unknown argument while initializing " + this._type + ": " + Arrays.toString(arg_val));
+					break;
 				}
 			}
 		}
