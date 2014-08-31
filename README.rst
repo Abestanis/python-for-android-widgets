@@ -74,6 +74,7 @@ Widgets
 If you want to provide widgets, you need a 'WidgetProvider.py' file in your program directory which should be structured as follows:
 
 .. code-block:: python
+  
   class MyWidget1(Widget):
       '''This class is the central interface between the python code
       and the widgets. All events occurring for the widget will get
@@ -103,18 +104,18 @@ If you want to provide widgets, you need a 'WidgetProvider.py' file in your prog
           the home screen.'''
           pass
 
-For each widget you want to provide you, need a class which is a subclass of the Widget
-class at `AndroidWidgets.py`_.
+An example 'WidgetProvider.py' is provided `here`_.
 
-You can also set certain properties of your widget by overwriting the corresponding
-variable in your class:
+For each widget you want to provide you, need a class which is a subclass of the Widget class at `AndroidWidgets.py`_.
+You can also set certain properties of your widget by overwriting the corresponding variable in your class:
 
 .. code-block:: python
+  
   class MyWidget2(Widget):
       
       widget_name = 'HelloWorldWidget'
 
-An example 'WidgetProvider.py' is provided `here`_.
+Finally you need to set the '--widget' flag when building your app with build.py in dist/default.
 
 
 Every widget has an id and a canvas. The canvas is used to define the widgets look.
