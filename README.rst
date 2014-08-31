@@ -71,43 +71,50 @@ a solution is to remove the "awk" binary in the android ndk distribution
 Widgets
 -------
 
-For now, your application will provide one widget type, whether you want more or none at all.
-This will be changeable in the future.
-
-If you want to interact with your widgets, you need a 'WidgetReceiver.py' file in your program directory which should be structured as follows:
+If you want to provide widgets, you need a 'WidgetProvider.py' file in your program directory which should be structured as follows:
 
 .. code-block:: python
-
-  class WidgetReceiver(object):
+  class MyWidget1(Widget):
       '''This class is the central interface between the python code
       and the widgets. All events occurring for the widget will get
       passed down to the corresponding functions in this class.'''
       
-      def __init__(self):
-          '''This function is called whenever a widget gets initialized,
+      def __init__(self, *args, **kwargs):
+          '''This function is called whenever a widget gets initialized and
           no other widgets are present and before 'initWidget' is called.
           You can use this function to get some data required for all your
           widgets or to set the default loading and error view.'''
           pass
       
-      def initWidget(self, widget):
+      def initWidget(self, *args, **kwargs):
           '''This function will initialize the given widget 'widget'
           and will set it's visual appearance. If this function
           returns False, the initialisation is considered as failed
           and an error view is displayed.'''
           return True
       
-      def updateWidget(self, widget:
-          '''This function gets called every time the android AlarmManager
-          schedules an update.'''
+      def updateWidget(self, *args, **kwargs):
+          '''This function gets called every time the widget receives
+          an update.'''
           pass
       
-      def destroyWidget(self, widget):
+      def destroyWidget(self, *args, **kwargs):
           '''This function is called if the user deletes a widget from
           the home screen.'''
           pass
 
-An example is provided `here`_.
+For each widget you want to provide you, need a class which is a subclass of the Widget
+class at `AndroidWidgets.py`_.
+
+You can also set certain properties of your widget by overwriting the corresponding
+variable in your class:
+
+.. code-block:: python
+  class MyWidget2(Widget):
+      
+      widget_name = 'HelloWorldWidget'
+
+An example 'WidgetProvider.py' is provided `here`_.
 
 
 Every widget has an id and a canvas. The canvas is used to define the widgets look.
@@ -151,6 +158,6 @@ You can get a new CanvasObject from every other CanvasObject or a canvas itself:
 For more information about the canvas system look at `AndroidWidgets.py`_.
 
 
-.. _here: https://github.com/Abestanis/python-for-android-widgets/blob/master/This%20goes%20into%20the%20program%20folder/WidgetReceiver.py
+.. _here: https://github.com/Abestanis/python-for-android-widgets/blob/master/This%20goes%20into%20the%20program%20folder/WidgetProvider.py
 .. _limitations: http://developer.android.com/guide/topics/appwidgets/index.html#CreatingLayout
 .. _AndroidWidgets.py: https://github.com/Abestanis/python-for-android-widgets/blob/master/This%20goes%20into%20the%20program%20folder/AndroidWidgets.py
