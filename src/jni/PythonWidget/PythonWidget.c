@@ -38,15 +38,52 @@ PyMODINIT_FUNC initwandroidembed(void) {
 }
 
 
+// Python helper func //
+
+PyObject* getallSubclasses(PyObject* cls, int top_level) {
+    PyObject* subclasses = PyObject_CallMethod(cls, "__subclasses__", NULL);
+    PyObject* lst        = PyList_New(0);
+    int       size       = PyList_Size(subclasses);
+    int i;
+    if (size != 0) {
+        LOGW("Widget has subclasses");
+        for( i = 0; i < size; i++) {
+            LOGW("Checking subclass...");
+            PyNumber_InPlaceAdd(lst, getallSubclasses(PyList_GetItem(subclasses, i), 0));
+        }
+    }
+    if (top_level != 1) {
+        PyList_Append(lst, cls);
+    }
+    return lst;
+}
+
+
 // Java jni functions //
 
-PyObject *wrInstance            = NULL;
 static JavaVM *Jvm              = NULL;
 jobject _PyWidgetClass          = NULL;
 PyObject* _androidWidgetsModule = NULL;
-static PyObject* _widgetsList   = NULL;
+static PyObject* _providerList  = NULL;/*
+ *
+ * example:
+ * {
+ *    widgetClassName1 = <class>, // Uninitialized provider
+ *    widgetClassName2 = { // Initialized provider
+ *        "class" = <class>,
+ *        "instance" = <instance>
+ *        provider_id1 = [ // To allow subclasses
+ *            <widgetId1>,
+ *            ...
+ *        ]
+ *        ...,
+ *    },
+ *    ...,
+ * }
+ */
 static PyObject* _callbackList  = NULL;
 static int INIT_SUCCESS         = 0;
+static int PYTHON_INIT 	        = 0;
 
 
 jint JNI_OnLoad(JavaVM *vm, void *reserved) {
@@ -66,10 +103,9 @@ JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativeinit(JN
     LOGW("C: Init PythonWidgets...");
     
     _PyWidgetClass = obj;
-    jboolean iscopy;
-    const char *android_private  = (*env)->GetStringUTFChars(env, andr_priv, &iscopy);
-    const char *android_argument = (*env)->GetStringUTFChars(env, andr_arg,  &iscopy);
-    const char *python_path      = (*env)->GetStringUTFChars(env, py_path,   &iscopy);
+    const char *android_private  = (*env)->GetStringUTFChars(env, andr_priv, 0);
+    const char *android_argument = (*env)->GetStringUTFChars(env, andr_arg,  0);
+    const char *python_path      = (*env)->GetStringUTFChars(env, py_path,   0);
     
     setenv("ANDROID_PRIVATE", android_private, 1);
     setenv("ANDROID_ARGUMENT", android_argument, 1);
@@ -83,6 +119,7 @@ JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativeinit(JN
     Py_SetProgramName(argv[0]);
     LOGW("C: Initializing Python...");
     Py_Initialize();
+    PYTHON_INIT = 1;
     LOGW("C: Done. Setting args...");
     PySys_SetArgv(1, argv);
     LOGW("C: Done. Init Threads...");
@@ -135,10 +172,10 @@ JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativeinit(JN
     
     chdir(android_argument);
     
-    // Setting up widget cache
-    if (_widgetsList == NULL) {
-        LOGW("C: Initializing Widget cache...");
-        _widgetsList = PyDict_New();
+    // Setting up provider cache
+    if (_providerList == NULL) {
+        LOGW("C: Initializing provider cache...");
+        _providerList = PyDict_New();
     }
     // Setting up callback storage
     if (_callbackList == NULL) {
@@ -150,58 +187,65 @@ JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativeinit(JN
     LOGW("C: Initializing PythonWidget modules...");
     initPythonWidgets();
     
-    //Import the WidgetReceiver module
+    //Import the WidgetProvider module
     
-    LOGW("C: Importing the WidgetReceiver module...");
+    LOGW("C: Importing the WidgetProvider module...");
     
     PyObject *ClassName = PyList_New(0);
-    PyList_Append(ClassName, PyString_FromString("WidgetReceiver"));
-    PyObject *wrmodule = PyImport_ImportModuleEx("WidgetReceiver", NULL, NULL, ClassName);
+    PyList_Append(ClassName, PyString_FromString("WidgetProvider"));
+    PyObject *wrmodule = PyImport_ImportModuleEx("WidgetProvider", NULL, NULL, ClassName);
     
     Py_DECREF(&ClassName);
     
     if (wrmodule == NULL) {
-        LOGW("C: Unable to import WidgetReceiver");
+        LOGW("C: Unable to import WidgetProvider");
         PyErr_Print();
         return;
     }
     
-    LOGW("C: Imported WidgetReceiver sucessfully.");
+    LOGW("C: Imported WidgetProvider successfully.");
     
-    //Extract the WidgetReceiver class
+    // Extract the original Widget class
     
-    if (PyObject_HasAttrString(wrmodule, "WidgetReceiver") == 0) {
-        LOGW("C: The imported module WidgetReceiver has no WidgetReceiver class!");
+    if (_androidWidgetsModule == NULL) {
+        LOGW("C: The AndroidWidgets module in not initialized!");
+        return;
+    } else if (PyObject_HasAttrString(_androidWidgetsModule, "Widget") != 1) {
+        LOGW("C: The AndroidWidgets module has no Widget class!");
+        return;
+    }
+    LOGW("C: Getting a referencepointer to the Widget class form the AndroidWidget module...");
+    PyObject *wClass = PyObject_GetAttrString(_androidWidgetsModule, "Widget");
+    if (wClass == NULL) {
+        LOGW("C: Failed! Could not find the WidgetProvider class!");
+        PyErr_Print();
         return;
     }
     
-    LOGW("C: Getting a referencepointer to the WidgetReceiver class...");
-    PyObject *wrClass = PyObject_GetAttrString(wrmodule, "WidgetReceiver");
+    // Get all widget classes
+    
+    LOGW("Gathering Widgets...");
+    
+    PyObject* widgets = getallSubclasses(wClass, 1);
+    
+    LOGW("Finished:");
+    
+    // store them
+    
+    int i;
+    
+    for (i = 0; i < PyList_GET_SIZE(widgets); i++) {
+        PyObject* widgetClass = PyList_GetItem(widgets, i);
+        PyObject* name = PyObject_GetAttrString(widgetClass, "__name__");
+        if (name == NULL) {
+            LOGW("Ha!!!!");
+        }
+        LOGW(PyString_AsString(name));
+        PyDict_SetItem(_providerList, name, widgetClass);
+    }
     
     Py_DECREF(wrmodule);
     
-    if (wrClass == NULL) {
-        LOGW("C: Failed! Could not find the WidgetReceiver class!");
-        PyErr_Print();
-        return;
-    }
-    LOGW("C: Sucess!");
-    
-    // Making an instance of this class
-    
-    LOGW("C: Trying to instanciate WidgetReceiver...");
-    
-    wrInstance  = PyObject_CallFunction(wrClass, NULL); 
-    
-    Py_DECREF(wrClass);
-    
-    if (wrInstance == NULL) {
-        LOGW("C: Failed! Could not create an instance of WidgetReceiver class!");
-        PyErr_Print();
-        
-        return;
-    }
-    LOGW("C: Sucess!");
     _PyWidgetClass = NULL;
     INIT_SUCCESS = 1;
     
@@ -211,79 +255,225 @@ JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativeinit(JN
 JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativeend(JNIEnv* env, jobject obj) {
     LOGW("C: Cleanup PythonWidgets...");
     LOGW("C: Closing Python...");
-    PyDict_Clear(_widgetsList);
-    PyDict_Clear(_callbackList);
-    _PyWidgetClass = NULL;
-    if (wrInstance != NULL) {
-	Py_DECREF(wrInstance);
-        wrInstance = NULL;
+    if (_providerList != NULL) {
+	PyDict_Clear(_providerList);
     }
-    Py_Finalize();
+    if (_callbackList != NULL) {
+	PyDict_Clear(_callbackList);
+    }
+    _PyWidgetClass = NULL;
+    if (PYTHON_INIT) {
+	Py_Finalize();
+    }
+    PYTHON_INIT  = 0;
     INIT_SUCCESS = 0;
     return;
 }
 
-JNIEXPORT jboolean JNICALL Java_org_renpy_android_PythonWidgetProvider_nativeinitWidget(JNIEnv* env, jobject obj, jint WidgetId) {
+JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativeinitProvider(JNIEnv* env, jobject obj, jint jProviderId, jstring jProviderClass) {
+    LOGW("Init Widget Provider...");
+    _PyWidgetClass = obj;
+    PyObject* providerId = Py_BuildValue("i", jProviderId);
+    const char* cProviderClass = (*env)->GetStringUTFChars(env, jProviderClass, 0);
+    PyObject* providerClass = PyString_FromString(cProviderClass);
+    LOGW(cProviderClass);
+    (*env)->ReleaseStringUTFChars(env, jProviderClass, cProviderClass);
+    
+    // Getting widget class
+    
+    LOGW("C: Trying to get the widget class...");
+    PyObject* widgetClass = PyDict_GetItem(_providerList, providerClass);
+    if (widgetClass == NULL) {
+        LOGW("C: Did not found widget class in cache!");
+        return;
+    }
+    if (PyDict_Check(widgetClass)) {
+        LOGW("C: Widget class already initialized, this must be a subclass!");
+        PyDict_SetItem(widgetClass, providerId, PyDict_New());
+        
+        if (PyObject_HasAttrString(PyDict_GetItemString(widgetClass, "class"), "init_action")) {
+            LOGW("Setting widget init action...");
+            PythonWidgets_setInitAction(NULL, Py_BuildValue("(sO)", cProviderClass, PyObject_GetAttrString(PyDict_GetItemString(widgetClass, "class"), "init_action")));
+        }
+        
+    } else {
+        // Building data structure
+        
+        PyObject* data = PyDict_New();
+        PyDict_SetItemString(data, "class", widgetClass);
+        
+        // Set the initAction
+        
+        if (PyObject_HasAttrString(widgetClass, "init_action")) {
+            LOGW("Setting widget init action...");
+            PythonWidgets_setInitAction(NULL, Py_BuildValue("(sO)", cProviderClass, PyObject_GetAttrString(widgetClass, "init_action")));
+        }
+        
+        // Making an instance of this class
+        
+        LOGW("C: Trying to instantiate the widget class...");
+        PyObject* widgetInstance = PyObject_CallFunction(widgetClass, NULL);
+        if (widgetInstance == NULL) {
+            LOGW("C: Failed! Could not create an instance of this widget class!");
+            PyErr_Print();
+            return;
+        }
+        LOGW("C: Success!");
+        PyDict_SetItemString(data, "instance", widgetInstance);
+        
+        // Initialize widget storage
+        
+        PyDict_SetItem(data, providerId, PyDict_New());
+        
+        // Storing data
+        
+        LOGW("C: Storing data in cache...");
+        PyDict_SetItem(_providerList, providerClass, data);
+    }
+    
+    LOGW("C: Done.");
+    PyObject_CallMethod(PyImport_AddModule("__builtin__"), "print", "(s)", "############");
+    PyObject_CallMethod(PyImport_AddModule("__builtin__"), "print", "(O)", _providerList);
+    return;
+}
+
+JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativeendProvider(JNIEnv* env, jobject obj, jint jProviderId, jstring jProviderClass) {
+    LOGW("C: Destroy Widget Provider...");
+    _PyWidgetClass = obj;
+    
+    PyObject* providerId = Py_BuildValue("i", jProviderId);
+    const char* cProviderClass = (*env)->GetStringUTFChars(env, jProviderClass, 0);
+    PyObject* providerClass = PyString_FromString(cProviderClass);
+    LOGW(cProviderClass);
+    (*env)->ReleaseStringUTFChars(env, jProviderClass, cProviderClass);
+    
+    if (PyDict_Check(_providerList) && (PyDict_Contains(_providerList, providerClass) == 1)) {
+        PyObject* provider = PyDict_GetItem(_providerList, providerClass);
+        if (PyDict_Check(provider)) {
+            if (PyDict_Size(provider) == 3) {
+                if (PyDict_SetItem(_providerList, providerClass, PyDict_GetItemString(PyDict_GetItem(_providerList, providerClass), "class")) == 0) {
+                    LOGW("C: Successfully deleted widget provider.");
+                } else {
+                    LOGW("C: Failed to destroy widget provider!");
+                    PyErr_Print();
+                }
+            } else {
+                LOGW("C: There is another provider active who needs this widgetClass.");
+                if (PyDict_DelItem(provider, providerId) != -1) {
+                    LOGW("C: Successfully deleted widget provider.");
+                } else {
+                    LOGW("C: Failed to destroy widget provider!");
+                }
+            }
+        } else {
+            LOGW("C: Could not destroy provider because he is not initialized.");
+        }
+    } else {
+        LOGW("C: Unable to destroy widget provider: Unable to find it in cache!");
+    }
+    PyObject_CallMethod(PyImport_AddModule("__builtin__"), "print", "(s)", "############");
+    PyObject_CallMethod(PyImport_AddModule("__builtin__"), "print", "(O)", _providerList);
+    _PyWidgetClass = NULL;
+}
+
+JNIEXPORT jboolean JNICALL Java_org_renpy_android_PythonWidgetProvider_nativeinitWidget(JNIEnv* env, jobject obj, jint jProviderId, jstring jProviderClass, jint WidgetId) {
     LOGW("C: Init Widget...");
     if (!INIT_SUCCESS) {LOGW("C: PythonWidget is not correctly initialized!"); return JNI_FALSE;}
     _PyWidgetClass = obj;
     PyEval_InitThreads();
-    if (_androidWidgetsModule != NULL) {// We need to initialize the widget and pass it in
+    
+    PyObject* providerId = Py_BuildValue("i", jProviderId);
+    const char* cProviderClass = (*env)->GetStringUTFChars(env, jProviderClass, 0);
+    PyObject* providerClass = PyString_FromString(cProviderClass);
+    LOGW(cProviderClass);
+    (*env)->ReleaseStringUTFChars(env, jProviderClass, cProviderClass);
+    PyObject* provider = PyDict_GetItem(_providerList, providerClass);
+    
+    PyObject_CallMethod(PyImport_AddModule("__builtin__"), "print", "(s)", "############");
+    PyObject_CallMethod(PyImport_AddModule("__builtin__"), "print", "(O)", _providerList);
+    
+    if (provider == NULL) {
+        LOGW("Failed to extract widget class from cache: Not found!");
+        return JNI_FALSE;
+    } else if (_androidWidgetsModule != NULL) {// We need to initialize the widget and pass it in
+        if (PyDict_Contains(provider, providerId) != 1) {
+            LOGW("C: The requested provider is not initialized or has no cache!");
+            return JNI_FALSE;
+        }
         LOGW("C: Calling Python method 'getWidget'...");
         PyObject *widget = PyObject_CallMethod(_androidWidgetsModule, "getWidget", "i", WidgetId);
-        LOGW("C: Done. Caching widget to Python cache...");
-        if (PyDict_SetItem(_widgetsList, Py_BuildValue("i", WidgetId), widget) == -1) {
+        LOGW("C: Done. Caching widget to cache...");
+        if (PyDict_SetItem(PyDict_GetItem(provider, providerId), Py_BuildValue("i", WidgetId), widget) == -1) {
             _PyWidgetClass = NULL;
             LOGW("C: Failed to insert widget in Python cache!");
             PyErr_Print();
             return JNI_FALSE;
         }
         LOGW("Done.");
-        if ((wrInstance != NULL) && (PyObject_HasAttrString(wrInstance, "initWidget") == 1)) {
-            PyObject *res = PyObject_Call(PyObject_GetAttrString(wrInstance, "initWidget"), Py_BuildValue("()"), Py_BuildValue("{sO}", "widget", widget));//PyDict_GetItem(_widgetsList, Py_BuildValue("i", WidgetId))
+        PyObject* widgetInstance = PyDict_GetItemString(provider, "instance");
+        if ((widgetInstance != NULL) && (PyObject_HasAttrString(widgetInstance, "initWidget") == 1)) {
+            PyObject *res = PyObject_Call(PyObject_GetAttrString(widgetInstance, "initWidget"), Py_BuildValue("()"), Py_BuildValue("{sO}", "widget", widget));//PyDict_GetItem(_providerList, Py_BuildValue("i", WidgetId))
             _PyWidgetClass = NULL;
             if (res == NULL) {
                 LOGW("C: Failed to execute initWidget!");
                 PyErr_Print();
                 return JNI_FALSE;
             }
-            LOGW("C: Sucessfully executed initWidget.");
+            LOGW("C: Successfully executed initWidget.");
             if (PyBool_Check(res) && (res == Py_True)) {
                 LOGW("C: Result is true.");
                 return JNI_TRUE;
             }
             LOGW("C: Result is false!");
             return JNI_FALSE;
+        } else {
+            _PyWidgetClass = NULL;
+            LOGW("C: Failed. Our WidgetProvider instance has no attribute 'initWidget'!");
         }
+    } else {
         _PyWidgetClass = NULL;
-        LOGW("C: Failed. Our WidgetProvider instance has no attribute 'initWidget'!");
-        return JNI_FALSE;
+        LOGW("C: Failed. Haven't initialized the AndroidWidgets module yet!");
     }
-    _PyWidgetClass = NULL;
-    LOGW("C: Failed. Haven't initialized the AndroidWidgets module yet!");
     return JNI_FALSE;
 }
 
-JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativeupdateWidget(JNIEnv* env, jobject obj, jint WidgetId) {
+JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativeupdateWidget(JNIEnv* env, jobject obj, jint jProviderId, jstring jProviderClass, jint WidgetId) {
     LOGW("C: Update Widget...");
     if (!INIT_SUCCESS) {LOGW("C: PythonWidget is not correctly initialized!"); return;}
     _PyWidgetClass = obj;
     PyEval_InitThreads();
-    if ((wrInstance != NULL) && (PyObject_HasAttrString(wrInstance, "updateWidget") == 1)) {
+    
+    PyObject* providerId = Py_BuildValue("i", jProviderId);
+    const char* cProviderClass = (*env)->GetStringUTFChars(env, jProviderClass, 0);
+    PyObject* providerClass = PyString_FromString(cProviderClass);
+    LOGW(cProviderClass);
+    (*env)->ReleaseStringUTFChars(env, jProviderClass, cProviderClass);
+    PyObject* provider = PyDict_GetItem(_providerList, providerClass);
+    
+    if (provider == NULL) {
+        LOGW("Failed to extract widget class from cache: Not found!");
+        return;
+    }
+    PyObject* widgetInstance = PyDict_GetItemString(provider, "instance");
+    if ((widgetInstance != NULL) && (PyObject_HasAttrString(widgetInstance, "updateWidget") == 1)) {
         LOGW("C: Getting cached widget");
-        PyObject* widget = PyDict_GetItem(_widgetsList, Py_BuildValue("i", WidgetId));
+        if (PyDict_Contains(provider, providerId) != 1) {
+            LOGW("C: The requested provider is not initialized or has no cache!");
+            return;
+        }
+        PyObject* widget = PyDict_GetItem(PyDict_GetItem(provider, providerId), Py_BuildValue("i", WidgetId));
         if (widget == NULL) {
            LOGW("C: Did not found the widget in the cache!");
             return; 
         }
-        PyObject *res = PyObject_Call(PyObject_GetAttrString(wrInstance, "updateWidget"), Py_BuildValue("()"), Py_BuildValue("{sO}", "widget", widget));
+        PyObject *res = PyObject_Call(PyObject_GetAttrString(widgetInstance, "updateWidget"), Py_BuildValue("()"), Py_BuildValue("{sO}", "widget", widget));
         _PyWidgetClass = NULL;
         if (res == NULL) {
             LOGW("C: Failed to execute updateWidget!");
             PyErr_Print();
             return;
         }
-        LOGW("C: Sucessfully executed updateWidget.");
+        LOGW("C: Successfully executed updateWidget.");
         return;
     }
     _PyWidgetClass = NULL;
@@ -291,22 +481,38 @@ JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativeupdateW
     return;
 }
 
-JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativedestroyWidget(JNIEnv* env, jobject obj, jint WidgetId) {
+JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativedestroyWidget(JNIEnv* env, jobject obj, jint jProviderId, jstring jProviderClass, jint WidgetId) {
     LOGW("C: Destroing Widget...");
     if (!INIT_SUCCESS) {LOGW("C: PythonWidget is not correctly initialized!"); return;}
     _PyWidgetClass = obj;
     PyEval_InitThreads();
-    //PyDict_DelItem(PyObject *p, PyObject *key)
-    if ((wrInstance != NULL) && (PyObject_HasAttrString(wrInstance, "destroyWidget") == 1)) {
-        PyObject* widget = PyDict_GetItem(_widgetsList, Py_BuildValue("i", WidgetId));
+    
+    PyObject* providerId = Py_BuildValue("i", jProviderId);
+    const char* cProviderClass = (*env)->GetStringUTFChars(env, jProviderClass, 0);
+    PyObject* providerClass = PyString_FromString(cProviderClass);
+    LOGW(cProviderClass);
+    (*env)->ReleaseStringUTFChars(env, jProviderClass, cProviderClass);
+    PyObject* provider = PyDict_GetItem(_providerList, providerClass);
+    
+    if (provider == NULL) {
+        LOGW("Failed to extract widget class from cache: Not found!");
+        return;
+    }
+    if (PyDict_Contains(provider, providerId) != 1) {
+        LOGW("C: The requested provider is not initialized or has no cache!");
+        return;
+    }
+    PyObject* widgetInstance = PyDict_GetItemString(provider, "instance");
+    if ((widgetInstance != NULL) && (PyObject_HasAttrString(widgetInstance, "destroyWidget") == 1)) {
+        PyObject* widget = PyDict_GetItem(PyDict_GetItem(provider, providerId), Py_BuildValue("i", WidgetId));
         if (widget == NULL) {
            LOGW("C: Did not found the widget in the cache!");
             return; 
         }
-        PyObject *res = PyObject_Call(PyObject_GetAttrString(wrInstance, "destroyWidget"), Py_BuildValue("()"), Py_BuildValue("{sO}", "widget", widget));
+        PyObject *res = PyObject_Call(PyObject_GetAttrString(widgetInstance, "destroyWidget"), Py_BuildValue("()"), Py_BuildValue("{sO}", "widget", widget));
         if (res != NULL) {
             _PyWidgetClass = NULL;
-            LOGW("C: Sucessfully executed destroyWidget.");
+            LOGW("C: Successfully executed destroyWidget.");
             return;
         }
         LOGW("C: Failed to execute destroyWidget!");
@@ -314,31 +520,48 @@ JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativedestroy
     } else {
         LOGW("C: Failed. Our WidgetProvider instance has no attribute 'destroyWidget'!");
     }
-    PyDict_DelItem(_widgetsList, Py_BuildValue("i", WidgetId));
+    PyDict_DelItem(PyDict_GetItem(provider, providerId), Py_BuildValue("i", WidgetId));
     _PyWidgetClass = NULL;
     return;
 }
 
-JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativePythonCallback(JNIEnv* env, jobject obj, jint WidgetId, jstring jPyFuncId) {
+JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativePythonCallback(JNIEnv* env, jobject obj, jint jProviderId, jstring jProviderClass, jint widgetId, jstring jFunctionId) {
     LOGW("C: Calling python callback function...");
     if (!INIT_SUCCESS) {LOGW("C: PythonWidget is not correctly initialized!"); return;}
     _PyWidgetClass = obj;
     PyEval_InitThreads();
-    LOGW("C: Converting given java string to c string...");
-    const char* CPyFuncId = (*env)->GetStringUTFChars(env, jPyFuncId, 0);
-    LOGW("C: Done. Function id is:");
-    LOGW(CPyFuncId);
-    LOGW("C: Converting c string to python string...");
-    PyObject* PyFuncId = Py_BuildValue("s", CPyFuncId);
-    LOGW("C: Done.");
-    if (PyDict_Check(_callbackList) && PyDict_Contains(_callbackList, PyFuncId)) {
-        PyObject* widget = PyDict_GetItem(_widgetsList, Py_BuildValue("i", WidgetId));
+    
+    const char* cProviderClass = (*env)->GetStringUTFChars(env, jProviderClass, 0);
+    const char* cFunctionId    = (*env)->GetStringUTFChars(env, jFunctionId, 0);
+    PyObject* providerClass    = PyString_FromString(cProviderClass);
+    PyObject* functionId       = PyString_FromString(cFunctionId);
+    LOGW(cProviderClass);
+    LOGW("C: Function id is:");
+    LOGW(cFunctionId);
+    (*env)->ReleaseStringUTFChars(env, jProviderClass, cProviderClass);
+    (*env)->ReleaseStringUTFChars(env, jFunctionId, cFunctionId);
+    PyObject* provider         = PyDict_GetItem(_providerList, providerClass);
+    PyObject* providerId       = Py_BuildValue("i", jProviderId);
+    PyObject* providerCache    = NULL;
+    PyObject* widget           = NULL;
+    PyObject* res              = NULL;
+    
+    if (provider == NULL) {
+        LOGW("Failed to extract widget class from cache: Not found!");
+        _PyWidgetClass = NULL;
+        return;
+    }
+    providerCache = PyDict_GetItem(provider, providerId);
+    
+    if (providerCache == NULL) {
+        LOGW("C: The requested provider is not initialized or has no cache!");
+    } else if (PyDict_Check(_callbackList) && (PyDict_Contains(_callbackList, functionId) == 1)) {
+        widget = PyDict_GetItem(providerCache, Py_BuildValue("i", widgetId));
         if (widget != NULL) {
-            PyObject *res = PyObject_Call(PyDict_GetItem(_callbackList, PyFuncId), Py_BuildValue("()"), Py_BuildValue("{sO}", "widget", widget));
+            res = PyObject_Call(PyDict_GetItem(_callbackList, functionId), Py_BuildValue("()"), Py_BuildValue("{sO}", "widget", widget));
             if (res != NULL) {
-                (*env)->ReleaseStringUTFChars(env, jPyFuncId, CPyFuncId);
                 _PyWidgetClass = NULL;
-                LOGW("C: Sucessfully executed python callback.");
+                LOGW("C: Successfully executed python callback.");
                 return;
             }
             LOGW("C: Failed to execute python callback!");
@@ -347,128 +570,14 @@ JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativePythonC
             LOGW("C: Did not found the widget in the cache!");
         }
     } else {
-        LOGW("C: Failed. No callback found for id:");
-        LOGW(CPyFuncId);
+        LOGW("C: Failed. No callback found!");
     }
-    (*env)->ReleaseStringUTFChars(env, jPyFuncId, CPyFuncId);
     _PyWidgetClass = NULL;
     return;
 }
 
+
 // PythonWidgets Module //
-
-/* Template:
-
-static PyObject *module_func(PyObject *self, PyObject *args) {
-   // Do your stuff here. //
-   Py_RETURN_NONE;
-}
-
- Test by:
-
-"C:\Java\jdk1.7.0_51\bin\javap.exe" -s -p "C:\Users\Sebastian\Documents\Android Workspace\PythonActivity\bin\classes\org\renpy\android\PythonWidgetProvider.class"
-*/
-
-/*All the Signatures:
-
-public class org.renpy.android.PythonWidgetProvider extends android.appwidget.AppWidgetProvider {
-  private static java.lang.String TAG;
-    Signature: Ljava/lang/String;
-  public static java.lang.String PERIODIC_WIDGET_UPDATE;
-    Signature: Ljava/lang/String;
-  public static final int DEFAULT_LOADING_LAYOUT;
-    Signature: I
-  public static final int DEFAULT_ERROR_LAYOUT;
-    Signature: I
-  private int _updatefreq;
-    Signature: I
-  private static android.content.Context myContext;
-    Signature: Landroid/content/Context;
-  private java.util.ArrayList<java.lang.Integer> myWidgets;
-    Signature: Ljava/util/ArrayList;
-  private java.lang.String _defaultLoadView;
-    Signature: Ljava/lang/String;
-  private java.lang.String _defaultErrorView;
-    Signature: Ljava/lang/String;
-  static {};
-    Signature: ()V
-
-  public org.renpy.android.PythonWidgetProvider();
-    Signature: ()V
-
-  public void onUpdate(android.content.Context, android.appwidget.AppWidgetManager, int[]);
-    Signature: (Landroid/content/Context;Landroid/appwidget/AppWidgetManager;[I)V
-
-  public void onAppWidgetOptionsChanged(android.content.Context, android.appwidget.AppWidgetManager, int, android.os.Bundle);
-    Signature: (Landroid/content/Context;Landroid/appwidget/AppWidgetManager;ILandroid/os/Bundle;)V
-
-  public void onDeleted(android.content.Context, int[]);
-    Signature: (Landroid/content/Context;[I)V
-
-  public void onEnabled(android.content.Context);
-    Signature: (Landroid/content/Context;)V
-
-  public void onDisabled(android.content.Context);
-    Signature: (Landroid/content/Context;)V
-
-  public void onReceive(android.content.Context, android.content.Intent);
-    Signature: (Landroid/content/Context;Landroid/content/Intent;)V
-
-  public void updateWidget(int, java.lang.String);
-    Signature: (ILjava/lang/String;)V
-
-  public boolean existWidget(int);
-    Signature: (I)Z
-
-  public void setDefaultLoadView(java.lang.String);
-    Signature: (Ljava/lang/String;)V
-
-  public java.lang.String getDefaultLoadView();
-    Signature: ()Ljava/lang/String;
-
-  public void setDefaultErrorView(java.lang.String);
-    Signature: (Ljava/lang/String;)V
-
-  public java.lang.String getDefaultErrorView();
-    Signature: ()Ljava/lang/String;
-
-  private void parseViewArgs(android.widget.RemoteViews, java.lang.String, int, java.lang.String);
-    Signature: (Landroid/widget/RemoteViews;Ljava/lang/String;ILjava/lang/String;)V
-
-  private android.widget.RemoteViews buildWidgetRemoteViews(int, java.lang.String, int);
-    Signature: (ILjava/lang/String;I)Landroid/widget/RemoteViews;
-
-  private android.widget.RemoteViews buildWidgetRemoteViews(int, java.lang.String);
-    Signature: (ILjava/lang/String;)Landroid/widget/RemoteViews;
-
-  private void startPythonService();
-    Signature: ()V
-
-  private void initWidget(android.content.Context, android.appwidget.AppWidgetManager, int);
-    Signature: (Landroid/content/Context;Landroid/appwidget/AppWidgetManager;I)V
-
-
-  private void updateWidget(android.content.Context, android.appwidget.AppWidgetManager, int);
-    Signature: (Landroid/content/Context;Landroid/appwidget/AppWidgetManager;I)V
-
-
-  public native void nativeinit(java.lang.String, java.lang.String, java.lang.String);
-    Signature: (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
-
-  public native void nativeend();
-    Signature: ()V
-
-  public native boolean nativeinitWidget(int);
-    Signature: (I)Z
-
-  public native void nativeupdateWidget(int);
-    Signature: (I)V
-
-  public native void nativedestroyWidget(int);
-    Signature: (I)V
-}
-
-*/
 
 static PyObject *PythonWidgets_updateWidget(PyObject *self, PyObject *args) {
     LOGW("C: PythonWidgets_updateWidget is getting called...");
@@ -495,7 +604,7 @@ static PyObject *PythonWidgets_updateWidget(PyObject *self, PyObject *args) {
         env = GetJNIEnv();
         msgassert(env, "Could not obtain the current environment!");
         cls = (*env)->GetObjectClass(env, _PyWidgetClass); // These methods are non static
-        msgassert(cls, "Could not get a refference to 'org/renpy/android/PythonWidgetProvider'!");
+        msgassert(cls, "Could not get a reference to 'org/renpy/android/PythonWidgetProvider'!");
         mid = (*env)->GetMethodID(env, cls, "updateWidget", "(ILjava/lang/String;)V");
         msgassert(mid, "Could not find the function 'updateWidget' in the Android class!");
     }
@@ -531,7 +640,7 @@ static PyObject *PythonWidgets_existWidget(PyObject *self, PyObject *args) {
         env = GetJNIEnv();
         msgassert(env, "Could not obtain the current environment!");
         cls = (*env)->GetObjectClass(env, _PyWidgetClass);
-        msgassert(cls, "Could not get a instance from class 'org/renpy/android/PythonWidgetProvider'!");
+        msgassert(cls, "Could not get an instance from class 'org/renpy/android/PythonWidgetProvider'!");
         mid = (*env)->GetMethodID(env, cls, "existWidget", "(I)Z");
         msgassert(mid, "Could not find the function 'existWidget' in the Android class!");
     }
@@ -561,7 +670,7 @@ static PyObject *PythonWidgets_getDfltErrView(PyObject *self, PyObject *args) {
         env = GetJNIEnv();
         msgassert(env, "Could not obtain the current environment!");
         cls = (*env)->GetObjectClass(env, _PyWidgetClass);
-        msgassert(cls, "Could not get a instance from class 'org/renpy/android/PythonWidgetProvider'!");
+        msgassert(cls, "Could not get an instance from class 'org/renpy/android/PythonWidgetProvider'!");
         mid = (*env)->GetMethodID(env, cls, "getDefaultErrorView", "()Ljava/lang/String;");
         msgassert(mid, "Could not find the function 'getDefaultErrorView' in the Android class!");
     }
@@ -599,7 +708,7 @@ static PyObject *PythonWidgets_setDfltErrView(PyObject *self, PyObject *args) {
         env = GetJNIEnv();
         msgassert(env, "Could not obtain the current environment!");
         cls = (*env)->GetObjectClass(env, _PyWidgetClass);
-        msgassert(cls, "Could not get a instance from class 'org/renpy/android/PythonWidgetProvider'!");
+        msgassert(cls, "Could not get an instance from class 'org/renpy/android/PythonWidgetProvider'!");
         mid = (*env)->GetMethodID(env, cls, "setDefaultErrorView", "(Ljava/lang/String;)V");
         msgassert(mid, "Could not find the function 'setDefaultErrorView' in the Android class!");
     }
@@ -623,83 +732,6 @@ static PyObject *PythonWidgets_setDfltErrView(PyObject *self, PyObject *args) {
     Py_RETURN_TRUE;
 }
 
-static PyObject *PythonWidgets_getDfltLoadView(PyObject *self, PyObject *args) {
-    LOGW("C: PythonWidgets_getDfltLoadView is getting called...");
-    
-    static JNIEnv *env = NULL;
-    static jclass *cls = NULL;
-    static jmethodID mid = NULL;
-    
-    if (env == NULL) {
-        LOGW("Trying to get env pointer.");
-        env = GetJNIEnv();
-        msgassert(env, "Could not obtain the current environment!");
-        cls = (*env)->GetObjectClass(env, _PyWidgetClass);
-        msgassert(cls, "Could not get a instance from class 'org/renpy/android/PythonWidgetProvider'!");
-        mid = (*env)->GetMethodID(env, cls, "getDefaultLoadView", "()Ljava/lang/String;");
-        msgassert(mid, "Could not find the function 'getDefaultLoadView' in the Android class!");
-    }
-    
-    LOGW("C: Calling java function getDefaultLoadView...");
-    jstring res = (*env)->CallObjectMethod(env, _PyWidgetClass, mid);
-    LOGW("C: back from Java, returning to Python...");
-    if (res == NULL) {
-        LOGW("C: Result is None...");
-        Py_RETURN_NONE;
-    }
-    else {
-        LOGW("C: Result is a string...");
-        LOGW("C: Converting Java string to C string...");
-        const char* tmp = (*env)->GetStringUTFChars(env, res, 0);
-        LOGW("C: Done. Converting C string to Python string...");
-        PyObject* res_str = PyString_FromString(tmp);
-        LOGW("C: Done.");
-        (*env)->ReleaseStringUTFChars(env, res, tmp);
-        return res_str;
-    }
-}
-
-static PyObject *PythonWidgets_setDfltLoadView(PyObject *self, PyObject *args) {
-    LOGW("C: PythonWidgets_setDfltLoadView is getting called...");
-    
-    static JNIEnv *env   = NULL;
-    static jclass *cls   = NULL;
-    static jmethodID mid = NULL;
-    const char* canvas   = NULL;
-    jstring arg          = NULL;
-    
-    if (env == NULL) {
-        LOGW("Trying to get env pointer.");
-        env = GetJNIEnv();
-        msgassert(env, "Could not obtain the current environment!");
-        cls = (*env)->GetObjectClass(env, _PyWidgetClass);
-        msgassert(cls, "Could not get a instance from class 'org/renpy/android/PythonWidgetProvider'!");
-        mid = (*env)->GetMethodID(env, cls, "setDefaultLoadView", "(Ljava/lang/String;)V");
-        msgassert(mid, "Could not find the function 'setDefaultLoadView' in the Android class!");
-    }
-    LOGW("C: Converting Python string to c...");
-    if (!PyArg_ParseTuple(args, "z", &canvas)) {
-        LOGW("C: (setDefaultLoadView) Failed to extract the canvas_string from the arguments!");
-        PyErr_Print();
-        Py_RETURN_FALSE;
-    }
-    LOGW("C: Done.");
-    if (canvas == NULL) {
-        LOGW("C: Given default loading view is null.");
-        arg = NULL;
-    } else {
-        LOGW(canvas);
-        LOGW("C: Converting C string to java string...");
-        arg = (*env)->NewStringUTF(env, canvas);
-        LOGW("C: Done.");
-    }
-    
-    LOGW("C: Calling java function setDefaultLoadView...");
-    (*env)->CallVoidMethod(env, _PyWidgetClass, mid, arg);
-    LOGW("C: back from Java, returning to Python...");
-    Py_RETURN_TRUE;
-}
-
 static PyObject *PythonWidgets_getWidgetData(PyObject *self, PyObject *args) {
     LOGW("C: PythonWidgets_getWidgetData is getting called...");
     
@@ -714,7 +746,7 @@ static PyObject *PythonWidgets_getWidgetData(PyObject *self, PyObject *args) {
         env = GetJNIEnv();
         msgassert(env, "Could not obtain the current environment!");
         cls = (*env)->GetObjectClass(env, _PyWidgetClass);
-        msgassert(cls, "Could not get a instance from class 'org/renpy/android/PythonWidgetProvider'!");
+        msgassert(cls, "Could not get an instance from class 'org/renpy/android/PythonWidgetProvider'!");
         mid = (*env)->GetMethodID(env, cls, "getWidgetData", "()Ljava/lang/String;");
         msgassert(mid, "Could not find the function 'getWidgetData' in the Android class!");
     }
@@ -740,22 +772,8 @@ static PyObject *PythonWidgets_getWidgetData(PyObject *self, PyObject *args) {
 
 static PyObject *PythonWidgets_addOnClickCallb(PyObject *self, PyObject *args) {
     LOGW("C: PythonWidgets_addOnClickCallb is getting called...");
-    
-    static JNIEnv *env   = NULL;
-    static jclass *cls   = NULL;
-    static jmethodID mid = NULL;
     PyObject *id         = NULL;
     PyObject *callback   = NULL;
-    
-    if (env == NULL) {
-        LOGW("Trying to get env pointer.");
-        env = GetJNIEnv();
-        msgassert(env, "Could not obtain the current environment!");
-        cls = (*env)->GetObjectClass(env, _PyWidgetClass);
-        msgassert(cls, "Could not get a instance from class 'org/renpy/android/PythonWidgetProvider'!");
-        mid = (*env)->GetMethodID(env, cls, "getWidgetData", "()Ljava/lang/String;");
-        msgassert(mid, "Could not find the function 'getWidgetData' in the Android class!");
-    }
     
     if (!PyArg_ParseTuple(args, "OO", &id, &callback)) {
         LOGW("C: Could not extract the id and the callback from the given arguments!");
@@ -778,15 +796,80 @@ static PyObject *PythonWidgets_addOnClickCallb(PyObject *self, PyObject *args) {
     Py_RETURN_TRUE;
 }
 
+static PyObject *PythonWidgets_setInitAction(PyObject *self, PyObject *args) {
+    LOGW("C: PythonWidgets_setInitAction is getting called...");
+    
+    static JNIEnv *env    = NULL;
+    static jclass *cls    = NULL;
+    static jmethodID mid  = NULL;
+    PyObject *widgetClass = NULL;
+    PyObject *action      = NULL;
+    static char* cAction  = NULL;
+    
+    // TODO: WIP
+    
+    if (env == NULL) {
+        LOGW("Trying to get env pointer.");
+        env = GetJNIEnv();
+        msgassert(env, "Could not obtain the current environment!");
+        cls = (*env)->GetObjectClass(env, _PyWidgetClass);
+        msgassert(cls, "Could not get an instance from class 'org/renpy/android/PythonWidgetProvider'!");
+        mid = (*env)->GetMethodID(env, cls, "setInitAction", "(Ljava/lang/String;)V");
+        msgassert(mid, "Could not find the function 'setInitAction' in the Android class!");
+    }
+    
+    if (!PyArg_ParseTuple(args, "sO", &widgetClass, &action)) {
+        LOGW("C: Could not extract the widgetClass and the action from the given arguments!");
+        PyErr_Print();
+        Py_RETURN_FALSE;
+    }
+    
+    if (action == Py_None) {
+        cAction = "None";
+    } else if (action == Py_True) {
+        cAction = "True";
+    } else if (PyString_Check(action)) {
+        cAction = PyString_AsString(action);
+    } else if (PyDict_Check(action)) {
+        LOGW("C: Importing urllib...");
+        PyObject* urllib = PyImport_ImportModuleNoBlock("urllib");
+        if (urllib == NULL) {
+            LOGW("C: Could not import urllib!");
+            PyErr_Print();
+            Py_RETURN_FALSE;
+        }
+        LOGW("C: Done. Calling urlencode...");
+        action = PyObject_CallMethod(urllib, "urlencode", "O", action);
+        if (action == NULL) {
+            LOGW("C: Urlencode failed!");
+            PyErr_Print();
+            Py_RETURN_FALSE;
+        }
+        LOGW("C: Done.");
+        Py_DECREF(urllib);
+        cAction = PyString_AsString(action);
+    } else {
+        LOGW("C: Given action is not a str, bool, int");
+        Py_RETURN_FALSE;
+    }
+    LOGW("C: Action:");
+    LOGW(cAction);
+    
+    LOGW("C: Calling java function setInitAction...");
+    (*env)->CallVoidMethod(env, _PyWidgetClass, mid, (*env)->NewStringUTF(env, cAction));
+    LOGW("C: back from Java, returning to Python...");
+    
+    Py_RETURN_TRUE;
+}
+
 static PyMethodDef module_methods[] = {
     { "updateWidget",        PythonWidgets_updateWidget,    METH_VARARGS, "Updates the widget with the id 'widget_Id' using the view 'widgetview'.\nYou need to call this function in order to make your\nchanges to the widgets graphics visible on the screen." },
-    { "existWidget",         PythonWidgets_existWidget,     METH_VARARGS, "Check's if a widget with the id 'widget_Id' was allready registered." },
-    { "getDefaultErrorView", PythonWidgets_getDfltErrView,  METH_NOARGS,  "Returns the default error view that is shown, if the\ninitialisation of an widget failed or None if None is set." },
-    { "setDefaultErrorView", PythonWidgets_setDfltErrView,  METH_VARARGS, "Sets the default error view that is shown, if the\ninitialisation of an widget failed." },
-    { "getDefaultLoadView",  PythonWidgets_getDfltLoadView, METH_NOARGS,  "Returns the default loading view that is shown during\nthe initialisation of an widget or None if None is set." },
-    { "setDefaultLoadView",  PythonWidgets_setDfltLoadView, METH_VARARGS, "Sets the default loading view that is shown\nduring the initialisation of an widget." },
-    { "getWidgetData",       PythonWidgets_getWidgetData,   METH_NOARGS, "Returns the data as a urlencoded string,\nthat was passed to 'storeWidgetData' in the main App or None,\nif there is no data stored." },
+    { "existWidget",         PythonWidgets_existWidget,     METH_VARARGS, "Check's if a widget with the id 'widget_Id' was already registered." },
+    { "getDefaultErrorView", PythonWidgets_getDfltErrView,  METH_NOARGS,  "Returns the default error view that is shown, if the\ninitialisation of a widget failed or None if None is set." },
+    { "setDefaultErrorView", PythonWidgets_setDfltErrView,  METH_VARARGS, "Sets the default error view that is shown, if the\ninitialisation of a widget failed." },
+    { "getWidgetData",       PythonWidgets_getWidgetData,   METH_NOARGS,  "Returns the data as a urlencoded string,\nthat was passed to 'storeWidgetData' in the main App or None,\nif there is no data stored." },
     { "addOnClick",          PythonWidgets_addOnClickCallb, METH_VARARGS, "Adds the given callback 'callback' to the identifier 'id'." },
+    { "setInitAction",       PythonWidgets_setInitAction,   METH_VARARGS, "Sets the action that occurs before initializion of the\nwidgets of the given 'widgetClass'." },
     /*{ "", (PyCFunction)module_func, METH_NOARGS, "" },*/
     { NULL, NULL, 0, NULL }
 };

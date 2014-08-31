@@ -21,15 +21,18 @@
 			   android:hardwareAccelerated="true"
                >
 
-  <receiver android:name="org.renpy.android.PythonWidgetProvider" >
+  {% for widget in widgets %}
+  <receiver android:name="{{ "org.renpy.appwidgets." ~ widget.name ~ "Provider" }}"
+	    android:label="{{ widget.name }}">
     <intent-filter>
        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
        <action android:name="com.pythonapp.widget.PYTHONWIDGET_CLOCK_WIDGET_UPDATE" />
        <action android:name="com.pythonapp.widget.PYTHONWIDGET_INPUT_WIDGET_UPDATE" />
     </intent-filter>
     <meta-data android:name="android.appwidget.provider"
-               android:resource="@layout/example_appwidget_info" />
+	       android:resource="{{"@layout/" ~ widget.info_name}}" />
   </receiver>
+  {% endfor %}
 
 	{% for m in args.meta_data %}
 	<meta-data android:name="{{ m.split('=', 1)[0] }}" android:value="{{ m.split('=', 1)[-1] }}"/>{% endfor %}

@@ -13,20 +13,17 @@ import android.net.Uri;
 import android.app.Activity;
 */
 import java.io.File;
-import java.io.UnsupportedEncodingException;
-import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Random;
+import java.util.Map;
 import java.util.Vector;
-
 import org.test.Instagram_Feed.R;
-import org.renpy.android.WidgetView;
-
+import org.renpy.android.RmView;
+import android.annotation.SuppressLint;
 import android.app.AlarmManager;
-import android.app.PendingIntent;
 import android.appwidget.AppWidgetManager;
 import android.appwidget.AppWidgetProvider;
 import android.content.ComponentName;
@@ -38,6 +35,7 @@ import android.os.Environment;
 import android.util.Log;
 import android.widget.RemoteViews;
 
+@SuppressLint("UseSparseArrays")
 public class PythonWidgetProvider extends AppWidgetProvider {
 	
     /*
@@ -65,17 +63,21 @@ public class PythonWidgetProvider extends AppWidgetProvider {
     }
     */
 	
-	private static final String TAG 				   = "PythonWidgets";
-	public 	static final String PERIODIC_WIDGET_UPDATE = "com.pythonapp.widget.PYTHONWIDGET_CLOCK_WIDGET_UPDATE";
-	public 	static final String WIDGET_INPUT_UPDATE    = "com.pythonapp.widget.PYTHONWIDGET_INPUT_WIDGET_UPDATE";
-	public  static final String WIDGET_DATA_STORAGE    = "PythonWidgetData";
-	public 	static final int 	DEFAULT_LOADING_LAYOUT = R.layout.widget_loading;
-	public 	static final int 	DEFAULT_ERROR_LAYOUT   = R.layout.widget_textview; // TODO: Replace with error view
-	private 			 int 	_updatefreq 		   = 15000; // TODO: Make this accessible from the python side
-	private static 		 Context myContext;
-	private static		 ArrayList<Integer> myWidgets  = new ArrayList<Integer>();
-	private static		 String _defaultLoadView  	   = null;
-	private static		 String _defaultErrorView 	   = null;
+	private static final String  TAG 				    = "PythonWidgets";
+	protected      final String  WIDGET_NAME  		    = null;
+    protected      final String  WIDGET_CLASS 		    = null;
+    protected 	   final Integer PROVIDER_ID 		    = null;
+	public 	static final String  PERIODIC_WIDGET_UPDATE = "com.pythonapp.widget.PYTHONWIDGET_CLOCK_WIDGET_UPDATE";
+	public 	static final String  WIDGET_INPUT_UPDATE    = "com.pythonapp.widget.PYTHONWIDGET_INPUT_WIDGET_UPDATE";
+	public  static final String  WIDGET_DATA_STORAGE    = "PythonWidgetData";
+	private static 		 boolean PythonInitialized      = false;
+	private static 		 int     _globalnumWidgets	    = 0;
+	
+	private   	 		 Context myContext;
+	private static 		 Map<Integer, ArrayList<Integer>> data   = new HashMap<Integer, ArrayList<Integer>>();
+	private static 		 Map<Integer, String> _defaultErrorViews = new HashMap<Integer, String>();
+	private static 		 Map<Integer, Integer> _updatefreqs      = new HashMap<Integer, Integer>();// TODO: Make this accessible from the python side
+	public  static 		 Map<Integer, String> _initActions       = new HashMap<Integer, String>();
 	
 	/*
 	 * Design of the string representation of the widgets views:
@@ -87,12 +89,27 @@ public class PythonWidgetProvider extends AppWidgetProvider {
 	 * LinearLayout()[TextView('text': '123'), TextView('text': '456')]
 	 */
 	
+	// TODO: Re-add Clock updates
+	
+	static {
+		Log.i(TAG, "Loading Python environment...");
+        System.loadLibrary("sdl");
+        System.loadLibrary("sdl_image");
+        System.loadLibrary("sdl_ttf");
+        System.loadLibrary("sdl_mixer");
+        System.loadLibrary("python2.7");
+        
+        // Importing PythonWidget c module
+        System.loadLibrary ("PythonWidget");
+	}
+	
 	
  	public void onUpdate(Context context, AppWidgetManager appWidgetManager, int[] appWidgetIds) {
 		/*This is called to update the App Widget at intervals defined by the updatePeriodMillis attribute in the AppWidgetProviderInfo (see Adding the AppWidgetProviderInfo Metadata above). This method is also called when the user adds the App Widget, so it should perform the essential setup, such as define event handlers for Views and start a temporary Service, if necessary. However, if you have declared a configuration Activity, this method is not called when the user adds the App Widget, but is called for the subsequent updates. It is the responsibility of the configuration Activity to perform the first update when configuration is done. (See Creating an App Widget Configuration Activity below.)
 		 */
 		super.onUpdate(context, appWidgetManager, appWidgetIds);
 		Log.d(TAG, "onUpdate called, args: Context " + context + ", AppWidgetManager " + appWidgetManager + " AppWidgetIDs " + Arrays.toString(appWidgetIds));
+		ArrayList<Integer> myWidgets = data.get(getProviderId());
 		Log.d(TAG, "Added Widgets: " + myWidgets.toString());
 		final int N = appWidgetIds.length;
 		
@@ -130,13 +147,20 @@ public class PythonWidgetProvider extends AppWidgetProvider {
 		Log.d(TAG, "onDeleted called, args: Context " + context + ", AppWidgetIDs " + Arrays.toString(appWidgetIds));
 		
 		List<int[]> WidgetIds = Arrays.asList(appWidgetIds);
+		ArrayList<Integer> myWidgets = data.get(getProviderId());
+		ArrayList<Integer> removeIds = new ArrayList<Integer>();
 		
 		for (Integer widgetId : myWidgets) {
 			if (!WidgetIds.contains(widgetId)) {
-				nativedestroyWidget(widgetId);
-				myWidgets.remove(widgetId);
-			};
+				removeIds.add(widgetId);
+			}
 		}
+		for (Integer id : removeIds) {
+				nativedestroyWidget(getProviderId(), getWidgetClass(), id);
+				myWidgets.remove(id);
+				_globalnumWidgets--;
+		}
+		Log.i(TAG, "Number of widgets: " + _globalnumWidgets);
 	}
 	
 	public void onEnabled(Context context) {
@@ -144,40 +168,13 @@ public class PythonWidgetProvider extends AppWidgetProvider {
 		 */
 		super.onEnabled(context);
 		Log.d(TAG, "onEnabled called, args: Context " + context);
-		Log.i(TAG, "Starting WidgetUpdate service...");
 		
-        AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
-
-        Calendar calendar = Calendar.getInstance();
-        calendar.setTimeInMillis(System.currentTimeMillis());
-        calendar.add(Calendar.SECOND, 1);
-        alarmManager.setRepeating(AlarmManager.RTC, calendar.getTimeInMillis(), _updatefreq, PendingIntent.getBroadcast(context, 0, new Intent(PERIODIC_WIDGET_UPDATE), PendingIntent.FLAG_UPDATE_CURRENT));
+		data.put(getProviderId(), new ArrayList<Integer>());
 		
-        Log.i(TAG, "Loading Python environment...");
-        
-        // I don't know why but this seems to be necessary
-        System.loadLibrary("sdl");
-        System.loadLibrary("sdl_image");
-        System.loadLibrary("sdl_ttf");
-        System.loadLibrary("sdl_mixer");
-        System.loadLibrary("python2.7");
-        
-        // Importing PythonWidget c module
-        System.loadLibrary ("PythonWidget");
-        
-        // Doing the same as the main thread (I hope...)
-        
-		File mPath;
-		if (context.getResources().getString(context.getResources().getIdentifier("public_version", "string", context.getPackageName())) != null) {
-	        mPath = new File(Environment.getExternalStorageDirectory(), context.getPackageName());
-	    } else {
-	        mPath = context.getFilesDir();
-	    }
+		//Load Python widget provider
 		
-		// ANDROID_PRIVATE, ANDROID_ARGUMENT
-		nativeinit(context.getFilesDir().getAbsolutePath(), mPath.getAbsolutePath(), context.getFilesDir().getAbsolutePath() + ":" + mPath.getAbsolutePath() + "/lib");
-		
-        //(Check if Python instance is Running)
+        Log.d(TAG, "Loading python widget provider for " + getWidgetName() + "...");
+        nativeinitProvider(getProviderId(), getWidgetClass());
 	}
 	
 	public void onDisabled(Context context) {
@@ -186,14 +183,22 @@ public class PythonWidgetProvider extends AppWidgetProvider {
 		super.onDisabled(context);
 		Log.d(TAG, "onDisabled called, args: Context " + context);
 		
-		Log.i(TAG, "Stopping WidgetUpdate service...");
+		//Unload Python widget provider
 		
-		AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
-        alarmManager.cancel(PendingIntent.getBroadcast(context, 0, new Intent(PERIODIC_WIDGET_UPDATE), PendingIntent.FLAG_UPDATE_CURRENT));
-		//End the Python Service
+        Log.d(TAG, "Unloading python widget provider for " + getWidgetName() + "...");
+        nativeendProvider(getProviderId(), getWidgetClass());
         
-        Log.i(TAG, "Unloading Python environment...");
-        nativeend();
+        data.remove(getProviderId());
+        
+        if (_globalnumWidgets <= 0) {
+//			Log.i(TAG, "Stopping WidgetUpdate service...");
+//			AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+//	        alarmManager.cancel(PendingIntent.getBroadcast(context, 0, new Intent(PERIODIC_WIDGET_UPDATE), PendingIntent.FLAG_UPDATE_CURRENT));
+	        
+	        Log.i(TAG, "Unloading Python environment...");
+			nativeend();
+			PythonInitialized = false;
+		}
 	}	
 	
 	@Override
@@ -201,10 +206,32 @@ public class PythonWidgetProvider extends AppWidgetProvider {
 		/*This is called for every broadcast and before each of the above callback methods. You normally don't need to implement this method because the default AppWidgetProvider implementation filters all App Widget broadcasts and calls the above methods as appropriate.
 		 */
 		
+//		intent.getComponent().getClassName(); //org.renpy.android.PythonWidget2Provider
+		
 		myContext = context;
-		Log.d(TAG, "onRecive called, Received intent " + intent);
+		if (!PythonInitialized) {
+			PythonInitialized = true;
+	        
+			//initializing Python Environment
+	      	
+			Log.d(TAG, "Initializing Python...");
+			
+			File mPath;
+	      	if (context.getResources().getString(context.getResources().getIdentifier("public_version", "string", context.getPackageName())) != null) {
+	      	    mPath = new File(Environment.getExternalStorageDirectory(), context.getPackageName());
+	      	} else {
+	      	    mPath = context.getFilesDir();
+	      	}
+	      		
+	      	// ANDROID_PRIVATE, ANDROID_ARGUMENT
+	      	nativeinit(context.getFilesDir().getAbsolutePath(), mPath.getAbsolutePath(), context.getFilesDir().getAbsolutePath() + ":" + mPath.getAbsolutePath() + "/lib");
+	        
+		}
+		
+		Log.d(TAG, "onRecive called for " + getWidgetName() + " (" + getWidgetClass() + "), Received intent " + intent);
 	    super.onReceive(context, intent);
 	    if (PERIODIC_WIDGET_UPDATE.equals(intent.getAction())) {
+	    	ArrayList<Integer> myWidgets = data.get(getProviderId());
 	    	if (myWidgets.isEmpty()) {
 	    		Log.w(TAG, "Got Preriodic widget update, when no widgets were initialized!");
 	    		Log.i(TAG, myWidgets.toString());
@@ -227,17 +254,26 @@ public class PythonWidgetProvider extends AppWidgetProvider {
 	    	} else {
 	    		// Start Python function
 	    		Log.i(TAG, "Calling Python function " + updateAction + ".");
-	    		nativePythonCallback(intent.getIntExtra("WidgetId", -1), updateAction);
+	    		nativePythonCallback(getProviderId(), getWidgetClass(), intent.getIntExtra("WidgetId", -1), updateAction);
+	    		
 	    	}
 	    }
 	}
 	
 	// Own methods
 	
+	public String getWidgetName() {
+		return WIDGET_NAME;
+	}
+	
+	public String getWidgetClass() {
+		return WIDGET_CLASS;
+	}
+	
 	public void updateWidget(int appWidgetId, String widgetlayout) {
 		Log.i(TAG, "Javas updateWidget is getting called on appWidgetId " + appWidgetId);
 		
-		if (!myWidgets.contains(appWidgetId)) {
+		if (!data.get(getProviderId()).contains(appWidgetId)) {
 			Log.w(TAG, "Widget does not exist.");
 			return;
 		}
@@ -252,32 +288,20 @@ public class PythonWidgetProvider extends AppWidgetProvider {
 	
 	public boolean existWidget(int appWidgetId) {
 		Log.i(TAG, "Javas existWidget is getting called on appWidgetId " + appWidgetId);
+		ArrayList<Integer> myWidgets = data.get(getProviderId());
 		Log.i(TAG, "Result is " + myWidgets.contains(appWidgetId));
 		return myWidgets.contains(appWidgetId);
 	}
 	
-	public void setDefaultLoadView(String defaultview) {
-		Log.i(TAG, "Setting default loading view: " + defaultview);
-		_defaultLoadView = defaultview;
-	}
-	
-	public String getDefaultLoadView() {
-		Log.i(TAG, "Returning default loading view: " + _defaultLoadView);
-		return _defaultLoadView;
-	}
-	
 	public void setDefaultErrorView(String defaultview) {
 		Log.i(TAG, "Setting default error view: " + defaultview);
-		_defaultErrorView = defaultview;
+		_defaultErrorViews.put(getProviderId(), defaultview);
 	}
 	
 	public String getDefaultErrorView() {
+		String _defaultErrorView = _defaultErrorViews.get(getProviderId());
 		Log.i(TAG, "Returning default error view: " + _defaultErrorView);
 		return _defaultErrorView;
-	}
-	
-	public static Context getWidgetContext() {
-		return myContext;
 	}
 	
 	public String getWidgetData() {
@@ -286,24 +310,23 @@ public class PythonWidgetProvider extends AppWidgetProvider {
 		return data;
 	}
 	
+	public void setInitAction(String action) {
+		_initActions.put(getProviderId(), action);
+	}
+	
+	public int getProviderId() {
+		return PROVIDER_ID;
+	}
+	
 	// Private functions
 	
-	private RemoteViews buildWidgetRemoteViews(int appWidgetId, String widgetview, int defaultLayout) {
+	private RemoteViews buildWidgetRemoteViews(int appWidgetId, String widgetview) {
 		Log.d(TAG, "(buildWidgetRemoteViews) Widgets View (" + appWidgetId + "): " + widgetview);
 		
 		if (widgetview == null) {
 			// Set widgetview to the user defined layout
-			Log.i(TAG, "Widget has no view, setting userdefined default if given...");
-			switch (defaultLayout) {
-			case DEFAULT_LOADING_LAYOUT:
-				Log.i(TAG, "Setting view to userdefined loading view.");
-				widgetview = _defaultLoadView;
-				break;
-			case DEFAULT_ERROR_LAYOUT:
-				Log.i(TAG, "Setting view to userdefined error view.");
-				widgetview = _defaultErrorView;
-				break;
-			}
+			Log.i(TAG, "Widget has no view, setting userdefined default error view if given...");
+			widgetview = _defaultErrorViews.get(getProviderId());
 		}
 		
 		
@@ -365,18 +388,18 @@ public class PythonWidgetProvider extends AppWidgetProvider {
 		if (widgetview != null) {
 			Log.i(TAG, "Creating widget view!");
 			String packageName = myContext.getPackageName();
-			Vector<WidgetView> viewList = new Vector<WidgetView>();
+			Vector<RmView> viewList = new Vector<RmView>();
 			while (widgetview.length() > 0) {
 				if (widgetview.startsWith("]")) {
 					if (viewList.size() > 1) {
-						WidgetView lastLayout = viewList.get(viewList.size() - 2);
+						RmView lastLayout = viewList.get(viewList.size() - 2);
 						lastLayout.addView(viewList.remove(viewList.size() - 1));
 						viewList.set(viewList.size() - 1, lastLayout);
 					}
 					widgetview = widgetview.substring(1);
 				} else {
 					int index = widgetview.indexOf("(");
-					WidgetView currentView = new WidgetView(packageName, widgetview.substring(0, index), widgetview.substring(index + 1), appWidgetId);
+					RmView currentView = new RmView(myContext, packageName, widgetview.substring(0, index), widgetview.substring(index + 1), appWidgetId, this);
 					widgetview = widgetview.substring(index + 1);
 					if (currentView.view == null) {
 						// An unknown View
@@ -394,7 +417,7 @@ public class PythonWidgetProvider extends AppWidgetProvider {
 						viewList.add(currentView);
 					} else {
 						// Adding this View to the current highest level view
-						WidgetView tmp = viewList.lastElement();
+						RmView tmp = viewList.lastElement();
 						tmp.addView(currentView);
 						viewList.set(viewList.size() - 1, tmp);
 					}
@@ -413,13 +436,9 @@ public class PythonWidgetProvider extends AppWidgetProvider {
 			}
 			Log.w(TAG, "Something went wrong during the build of the widgets views: There is no view left in the queue: " + viewList);
 		}
-		// Set view to the hard-coded defaults cause the user has not defined a default layout
-		Log.i(TAG, "Setting layout to a hardcoded default.");
-		return new RemoteViews(myContext.getPackageName(), defaultLayout);
-	}
-	
-	private RemoteViews buildWidgetRemoteViews(int appWidgetId, String widgetview) {
-		return buildWidgetRemoteViews(appWidgetId, widgetview, DEFAULT_ERROR_LAYOUT);
+		// Set view to the hard-coded default cause the user has not defined a default error view
+		Log.i(TAG, "Setting layout to a hardcoded default error view.");
+		return new RemoteViews(myContext.getPackageName(), R.id.widget_progressbar);
 	}
 	
 	private void startPythonService() {
@@ -428,35 +447,31 @@ public class PythonWidgetProvider extends AppWidgetProvider {
 	
 	private void initWidget(Context context, AppWidgetManager appWidgetManager, int appWidgetId) {
 		Log.i(TAG, "Initialize Widget " + appWidgetId + "...");
-		Log.i(TAG, "Setting loading view for Widget " + appWidgetId + "!");
+		data.get(getProviderId()).add(appWidgetId);
+		_globalnumWidgets++;
 		
-		myWidgets.add(appWidgetId);
-		
-		RemoteViews views = buildWidgetRemoteViews(appWidgetId, null, DEFAULT_LOADING_LAYOUT);
-		
-		Log.i(TAG, "Got Widget View.");
-		// Tell the AppWidgetManager to perform an update on the current app widget
-		appWidgetManager.updateAppWidget(appWidgetId, views);
-		if (!nativeinitWidget(appWidgetId)) {
+		if (!nativeinitWidget(getProviderId(), getWidgetClass(), appWidgetId)) {
 			Log.w(TAG, "Python initialisation failed, setting default error View");
-			views = buildWidgetRemoteViews(appWidgetId, null);
+			RemoteViews views = buildWidgetRemoteViews(appWidgetId, null);
 			appWidgetManager.updateAppWidget(appWidgetId, views);
 		}
 	}
 	
 	private void updateWidget(Context context, AppWidgetManager appWidgetManager, int appWidgetId) {
 		Log.i(TAG, "Update Widget " + appWidgetId + "...");
-		nativeupdateWidget(appWidgetId);
+		nativeupdateWidget(getProviderId(), getWidgetClass(), appWidgetId);
 	}
 
 	// Native functions
 	
 	public native void    nativeinit(String android_private, String android_argument, String python_path);
 	public native void    nativeend();
-	public native boolean nativeinitWidget(int WidgetId);
-	public native void    nativeupdateWidget(int WidgetId);
-	public native void    nativedestroyWidget(int WidgetId);
-	public native void 	  nativePythonCallback(int WidgetId, String methodname);
+	public native void    nativeinitProvider(  int providerId, String className);
+	public native void    nativeendProvider(   int providerId, String className);
+	public native boolean nativeinitWidget(    int providerId, String className, int widgetId);
+	public native void    nativeupdateWidget(  int providerId, String className, int widgetId);
+	public native void    nativedestroyWidget( int providerId, String className, int widgetId);
+	public native void 	  nativePythonCallback(int providerId, String className, int widgetId, String methodname);
 	
 }
 

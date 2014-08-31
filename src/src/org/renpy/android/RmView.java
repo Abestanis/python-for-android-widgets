@@ -19,21 +19,22 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.test.Instagram_Feed.R;
-import org.renpy.android.PythonWidgetProvider;
 
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Color;
 import android.util.Log;
 import android.widget.RemoteViews;
 
 
-public class WidgetView {
+public class RmView {
 	private static final String TAG = "PythonWidgets";
 	private final String _type;
 	private final int widget_Id;
+	private final Context context;
 	private static final Map<String, int[]> VIEWS;
 	static {
         VIEWS = new HashMap<String, int[]>();
@@ -65,14 +66,17 @@ public class WidgetView {
 		text,
 		on_click,
 		image_path,
-		image_url
+		image_url,
+		text_color,
+		visibility
 	}
 	public RemoteViews view = null;
 	public final int view_Id;
 
-	public WidgetView(String packageName, String type, String args, int widget_Id) {
+	public RmView(Context context, String packageName, String type, String args, int widget_Id, Object _class) {
 		super();
 		Log.i(TAG, "Creating " + type);
+		this.context = context;
 		this._type = type;
 		this.widget_Id = widget_Id;
 		if (VIEWS.containsKey(this._type)) {
@@ -88,7 +92,7 @@ public class WidgetView {
 			}
 			
 			Log.i(TAG, args);
-			parseViewArgs(args);
+			parseViewArgs(args, _class);
 		} else {
 			Log.w(TAG, "Got unknown widgetView type " + type);
 			this.view_Id = -1;
@@ -100,13 +104,13 @@ public class WidgetView {
 		this.view.addView(this.view_Id, nestedView);
 	}
 	
-	void addView(WidgetView child) {
+	void addView(RmView child) {
 		Log.i(TAG, "Adding " + child._type + " (" + child.toString() + ") to " + this._type + " (" + this.view.toString() + ").");
 		this.view.addView(this.view_Id, child.view);
 	}
 
 	
-	private void parseViewArgs(String args_str) {
+	private void parseViewArgs(String args_str, Object _class) {
 		if (!args_str.startsWith(")")) {
 			String[] args = args_str.substring(0, args_str.indexOf(")")).split("&");
 			Log.i(TAG, Arrays.toString(args));
@@ -138,15 +142,25 @@ public class WidgetView {
 				case on_click:
 					Intent inputIntent = null;
 					PendingIntent pendingIntent = null;
-					Context context = PythonWidgetProvider.getWidgetContext();
 					if (arg_val[1].equals(".StartActivity")) {
 						Log.i(TAG, "Setting on_click callback to launch the main App."); // TODO: If the main App is still open in cache, it is not able to open main.py
 						inputIntent = new Intent(context, PythonActivity.class);
 			            pendingIntent = PendingIntent.getActivity(context, 0, inputIntent, PendingIntent.FLAG_UPDATE_CURRENT);
 					} else {
 						Log.i(TAG, "Setting on_click callback: " + arg_val[1]);
-						inputIntent = new Intent(context, PythonWidgetProvider.class);
-						inputIntent.setAction(PythonWidgetProvider.WIDGET_INPUT_UPDATE);
+						inputIntent = new Intent(context, _class.getClass());
+						try {
+							inputIntent.setAction((String) _class.getClass().getField("WIDGET_INPUT_UPDATE").get(_class));
+						} catch (NoSuchFieldException e) {
+							Log.e(TAG, "Given object " + _class + " has no field called 'WIDGET_INPUT_UPDATE'!");
+							e.printStackTrace();
+						} catch (IllegalAccessException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						} catch (IllegalArgumentException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						}
 						inputIntent.putExtra("UpdateAction", arg_val[1]);
 						inputIntent.putExtra("WidgetId",     this.widget_Id);
 						pendingIntent = PendingIntent.getBroadcast(context, 0, inputIntent, PendingIntent.FLAG_UPDATE_CURRENT);
@@ -165,13 +179,47 @@ public class WidgetView {
 					break;
 				case image_url:
 					Log.i(TAG, "Setting image url_source to " + arg_val[1]);
-					Bitmap url_image = DownloadImage(arg_val[1]);
+					Bitmap url_image = downloadImage(arg_val[1]);
 					if (url_image != null) {
 						this.view.setImageViewBitmap(this.view_Id, url_image);
 					} else {
 						Log.e(TAG, "Failed loading the image located at the given path!");
 						// TODO: Set to missing Resource image?
 					}
+					break;
+				case text_color:
+					Log.i(TAG, "Setting Text color to " + arg_val[1]);
+					if (arg_val[1].startsWith("(") || arg_val[1].startsWith("[")) {
+						arg_val[1] = arg_val[1].substring(1);
+					}
+					if (arg_val[1].endsWith(")") || arg_val[1].endsWith("]")) {
+						arg_val[1] = arg_val[1].substring(0, arg_val[1].length() - 1);
+					}
+					arg_val[1] = arg_val[1].replaceAll(" ", "");
+					Log.i(TAG, arg_val[1]);
+					String[] colors = arg_val[1].split(",");
+					Integer color = null;
+					if (colors.length == 1) {
+						Log.i(TAG, "Color is " + colors[0]);
+						color = Integer.valueOf(colors[0]);
+					} else if (colors.length == 3) {
+						Log.i(TAG, "Extracted RGB: " + Arrays.toString(colors));
+						color = Color.rgb(Integer.valueOf(colors[0]), Integer.valueOf(colors[1]), Integer.valueOf(colors[2]));
+					} else if (colors.length == 4) {
+						Log.i(TAG, "Extracted RGBA: " + Arrays.toString(colors));
+						color = Color.argb(Integer.valueOf(colors[3]), Integer.valueOf(colors[0]), Integer.valueOf(colors[1]), Integer.valueOf(colors[2]));
+					}
+					
+					if (color == null){
+						Log.w(TAG, "Got unknown color format: " + arg_val[1]);
+						continue;
+					}
+					this.view.setTextColor(this.view_Id, color);
+					this.view.setViewVisibility(this.view_Id, 4);
+					break;
+				case visibility:
+					Log.i(TAG, "Set visibility to " + arg_val[1]);
+					this.view.setViewVisibility(this.view_Id, Integer.valueOf(arg_val[1]));
 					break;
 //				case Argument:
 //					break;
@@ -186,7 +234,7 @@ public class WidgetView {
 	
 	// Some additional stuff
 	
-	private InputStream OpenHttpConnection(String urlString) throws IOException {
+	private InputStream openHttpConnection(String urlString) throws IOException {
         InputStream in = null;
         int response = -1;
 
@@ -200,6 +248,7 @@ public class WidgetView {
             HttpURLConnection httpConn = (HttpURLConnection) conn;
             httpConn.setAllowUserInteraction(false);
             httpConn.setInstanceFollowRedirects(true);
+            httpConn.setConnectTimeout(5000);
             httpConn.setRequestMethod("GET");
             httpConn.connect();
             response = httpConn.getResponseCode();
@@ -212,15 +261,15 @@ public class WidgetView {
         return in;
     }
 
-    private Bitmap DownloadImage(String URL) {
+    private Bitmap downloadImage(String URL) {
+    	// TODO: First, look for cache, then for connection
         Bitmap bitmap = null;
         InputStream in = null;
         try {
-            in = OpenHttpConnection(URL);
+            in = openHttpConnection(URL);
             bitmap = BitmapFactory.decodeStream(in);
             in.close();
         } catch (IOException e1) {
-            // TODO Auto-generated catch block
             e1.printStackTrace();
         }
         return bitmap;

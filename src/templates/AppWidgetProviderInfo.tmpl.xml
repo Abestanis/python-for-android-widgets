@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="{{ widget.dflt_size[0] ~ "dp" }}"
+    android:minHeight="{{ widget.dflt_size[1] ~ "dp" }}"
+    {% if android_api >= 12 -%}
+    {% if widget.min_size != none -%}
+    android:minResizeWidth="{{ widget.min_size[0] ~ "dp" }}"
+    android:minResizeHeight="{{ widget.min_size[1] ~ "dp" }}"
+    {%- endif %}
+    android:resizeMode="{{ widget.resize_mode }}"
+    {%- endif %}
+    android:updatePeriodMillis="{{ widget.hard_update }}"
+    {% if android_api >= 11 and widget.preview_image != none -%}
+    android:previewImage="{{ "@drawable/" ~ widget.preview_image }}"
+    {%- endif %}
+    {% if widget.category in ["home_screen", "home_screen|keyguard"] -%}
+    android:initialLayout="{{ "@layout/" ~ widget.layout }}"
+    {%- endif %}
+    {% if false -%}
+    android:configure="org.renpy.android.PythonWidgetConfigurationActivity"
+    {%- endif %}
+    {% if android_api >= 17 -%}
+    android:widgetCategory="{{ widget.category }}"
+    {% if widget.category in ["keyguard", "home_screen|keyguard"] -%}
+    android:initialKeyguardLayout="{{ "@layout/" ~ widget.lock_layout }}"
+    {%- endif %}
+    {%- endif %}
+    >
+</appwidget-provider>
