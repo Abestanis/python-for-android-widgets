@@ -106,8 +106,8 @@ If you want to provide widgets, you need a 'WidgetProvider.py' file in your prog
 
 An example 'WidgetProvider.py' is provided `here`_.
 
-For each widget you want to provide you, need a class which is a subclass of the Widget class at `AndroidWidgets.py`_.
-You can also set certain properties of your widget by overwriting the corresponding variable in your class:
+For each widget you want to provide, you need a class which is a subclass of the Widget class at `AndroidWidgets.py`_.
+You can also set certain properties of your widget by overwriting the corresponding attribute in your class:
 
 .. code-block:: python
   
@@ -118,7 +118,7 @@ You can also set certain properties of your widget by overwriting the correspond
 Finally you need to set the '--widget' flag when building your app with build.py in dist/default.
 
 
-Every widget has an id and a canvas. The canvas is used to define the widgets look.
+Each widget has an id and a canvas. The canvas is used to define the widgets look.
 Just add a CanvasObject (aka. view) to the canvas and push the change to the screen:
 
 .. code-block:: python
