@@ -26,7 +26,7 @@ import javax.microedition.khronos.egl.EGLSurface;
 import javax.microedition.khronos.opengles.GL10;
 import android.opengl.GLES20;
 import android.opengl.Matrix;
-
+import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
@@ -48,6 +48,7 @@ import android.view.inputmethod.CompletionInfo;
 //import android.view.inputmethod.CorrectionInfo;
 import android.opengl.GLSurfaceView;
 import android.net.Uri;
+import android.os.Build;
 import android.os.PowerManager;
 import android.os.Handler;
 import android.content.pm.PackageManager;
@@ -63,6 +64,7 @@ import java.lang.Math;
 import java.nio.FloatBuffer;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.Arrays;
 import android.graphics.Color;
 import android.content.res.Resources;
 
@@ -522,6 +524,22 @@ public class SDLSurfaceView extends SurfaceView implements SurfaceHolder.Callbac
             wakeLock.acquire();
     }
 
+    @TargetApi(Build.VERSION_CODES.HONEYCOMB)
+    public static void setConfigResult(boolean ok) {
+    	Intent args = mActivity.getIntent();
+    	if (args != null && args.getLongExtra("ConfigActivityId", -1) != -1) {
+    		Log.i("PythonWidgets", "Set config result to " + ok);
+    		int mode = Context.MODE_PRIVATE;
+        	if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.HONEYCOMB) {
+        		mode |= Context.MODE_MULTI_PROCESS;
+        	}
+    		SharedPreferences widgetData = mActivity.getSharedPreferences("PythonConfigState", mode);
+            SharedPreferences.Editor editor = widgetData.edit();
+            editor.putString(String.valueOf(args.getLongExtra("ConfigActivityId", -1)), String.valueOf(ok));
+            editor.commit();
+        }
+    }
+    
     public void onDestroy() {
         Log.w(TAG, "onDestroy() called");
         this.closeSoftKeyboard();
@@ -616,14 +634,6 @@ public class SDLSurfaceView extends SurfaceView implements SurfaceHolder.Callbac
                 nativeExpose();
             }
         }
-    }
-
-    public static void storeWidgetData(String data) {
-    	Log.i("PythonWidgets", "Storing data: " + data);
-    	SharedPreferences widgetData = mActivity.getSharedPreferences("PythonWidgetData", 0);
-        SharedPreferences.Editor editor = widgetData.edit();
-        editor.putString("data", data);
-        editor.commit();
     }
 
     public void run() {
@@ -724,14 +734,23 @@ public class SDLSurfaceView extends SurfaceView implements SurfaceHolder.Callbac
         // Anyway, if you remove that part of the code, ensure the Laucher
         // (ProjectChooser) is still working.
         final android.content.Intent intent = mActivity.getIntent();
+        String[] argvs = {};
         if (intent != null) {
             final android.net.Uri data = intent.getData();
-            if (data != null && data.getEncodedPath() != null)
+            if (data != null && data.getEncodedPath() != null) {
                 nativeSetEnv("PYTHON_OPENFILE", data.getEncodedPath());
+            }
+            // Get the argv
+            if (intent.hasExtra("argv") && intent.getStringArrayExtra("argv") != null) {
+            	argvs = intent.getStringArrayExtra("argv");
+            }
         }
+        Log.i(TAG, "Arguments: " + Arrays.toString(argvs));
+        // Ensure that set- and getWidgetData can be called
+        PythonWidgetProvider.setContext(mActivity);
 
         nativeSetMultitouchUsed();
-        nativeInit();
+        nativeInit(argvs);
 
         mPause = PAUSE_STOP_ACK;
 
@@ -1422,7 +1441,7 @@ public class SDLSurfaceView extends SurfaceView implements SurfaceHolder.Callbac
     // Native part
 
     public static native void nativeSetEnv(String name, String value);
-    public static native void nativeInit();
+    public static native void nativeInit(String[] argv);
 
     public static native void nativeMouse( int x, int y, int action, int pointerId, int pressure, int radius );
     public static native boolean nativeKey(int keyCode, int down, int unicode);

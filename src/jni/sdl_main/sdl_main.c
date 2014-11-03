@@ -23,14 +23,21 @@
 #define JAVA_EXPORT_NAME1(name,package) JAVA_EXPORT_NAME2(name,package)
 #define JAVA_EXPORT_NAME(name) JAVA_EXPORT_NAME1(name,SDL_JAVA_PACKAGE_PATH)
 
-
 static int isSdcardUsed = 0;
 
 extern C_LINKAGE void
-JAVA_EXPORT_NAME(SDLSurfaceView_nativeInit) ( JNIEnv*  env, jobject thiz )
+JAVA_EXPORT_NAME(SDLSurfaceView_nativeInit) ( JNIEnv*  env, jobject thiz, jobjectArray jargv )
 {
-	int argc = 1;
-	char * argv[] = { "sdl" };
+	int i;
+	int argc = (*env)->GetArrayLength(env, jargv) + 1;
+	char **argv = malloc(sizeof(char*) * argc);
+	argv[0] = (char *) "sdl";
+	for (i = 0; i < argc - 1; i++) {
+	    jstring str = (jstring) (*env)->GetObjectArrayElement(env, jargv, i);
+	    const char *rawStr = (*env)->GetStringUTFChars(env, str, 0);
+	    argv[i + 1] = strdup(rawStr);
+	    (*env)->ReleaseStringUTFChars(env, str, rawStr);
+	}
 	main( argc, argv );
 };
 

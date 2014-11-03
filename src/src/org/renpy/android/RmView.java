@@ -161,9 +161,12 @@ public class RmView {
 							// TODO Auto-generated catch block
 							e.printStackTrace();
 						}
+						if (android.os.Build.VERSION.SDK_INT > android.os.Build.VERSION_CODES.HONEYCOMB) {
+							inputIntent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
+						}
 						inputIntent.putExtra("UpdateAction", arg_val[1]);
-						inputIntent.putExtra("WidgetId",     this.widget_Id);
-						pendingIntent = PendingIntent.getBroadcast(context, 0, inputIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+						inputIntent.putExtra("WidgetId", this.widget_Id);
+						pendingIntent = PendingIntent.getBroadcast(context, this.widget_Id, inputIntent, PendingIntent.FLAG_UPDATE_CURRENT);
 					}
 					this.view.setOnClickPendingIntent(this.view_Id, pendingIntent);
 					break;
@@ -201,7 +204,15 @@ public class RmView {
 					Integer color = null;
 					if (colors.length == 1) {
 						Log.i(TAG, "Color is " + colors[0]);
-						color = Integer.valueOf(colors[0]);
+						try {
+							color = Color.parseColor(colors[0]);
+						} catch (IllegalArgumentException e) {
+							try {
+								color = Color.parseColor("#" + colors[0]);
+							} catch (IllegalArgumentException e2) {
+								Log.w(TAG, colors[0] + " could not be parsed to an color,");
+							}
+						}
 					} else if (colors.length == 3) {
 						Log.i(TAG, "Extracted RGB: " + Arrays.toString(colors));
 						color = Color.rgb(Integer.valueOf(colors[0]), Integer.valueOf(colors[1]), Integer.valueOf(colors[2]));
@@ -215,7 +226,6 @@ public class RmView {
 						continue;
 					}
 					this.view.setTextColor(this.view_Id, color);
-					this.view.setViewVisibility(this.view_Id, 4);
 					break;
 				case visibility:
 					Log.i(TAG, "Set visibility to " + arg_val[1]);

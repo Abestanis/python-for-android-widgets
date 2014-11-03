@@ -108,6 +108,7 @@ static PyObject *PythonWidgets_updateWidget(   PyObject *self, PyObject *args);
 static PyObject *PythonWidgets_existWidget(    PyObject *self, PyObject *args);
 static PyObject *PythonWidgets_getDfltErrView( PyObject *self, PyObject *args);
 static PyObject *PythonWidgets_setDfltErrView( PyObject *self, PyObject *args);
+static PyObject *PythonWidgets_storeWidgetData(PyObject *self, PyObject *args);
 static PyObject *PythonWidgets_getWidgetData(  PyObject *self, PyObject *args);
 static PyObject *PythonWidgets_addOnClickCallb(PyObject *self, PyObject *args);
 static PyObject *PythonWidgets_setInitAction(  PyObject *self, PyObject *args);

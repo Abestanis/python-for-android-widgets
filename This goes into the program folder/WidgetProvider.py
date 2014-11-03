@@ -8,11 +8,14 @@
 # We create 3 Widgets: HelloWorldWidget, HelloWorldWidgetLarge and MyImageWidget
 
 from AndroidWidgets import *
+from urlparse       import parse_qsl
+from urllib         import unquote_plus
 
 class HelloWorldWidget(Widget):
     '''This class defines two Widgets which will display
     'Hello World" and launch the main App, if the user
-    clicks on them.'''
+    clicks on them. This widget has no configuration.
+    '''
     
     widget_dflt_size = estimateSize(2,2)
     widget_min_size  = estimateSize(1,1)
@@ -28,7 +31,6 @@ class HelloWorldWidget(Widget):
     # str(layout)
     resize_mode      = None
     widget_category  = Widget.Both
-    init_action      = True
     sub_widgets      = [
         {
             'widget_name': 'HelloWorldWidgetLarge',
@@ -44,12 +46,15 @@ class HelloWorldWidget(Widget):
     def __init__(self, *args, **kwargs):
         print('Python: Init class...')
         print('Hello World!')
+        setDefaultError(Canvas().TextView(text = 'An error occoured!'))
+        print('Default Error:')
+        print(getDefaultError())
     
     def initWidget(self, *args, **kwargs):
         print('Python: Init Widget...')
         if 'widget' not in kwargs:
             print('[ERROR] No widget passed in and thus can not get initialized!')
-            return False # Widget will show a 'failed' message and wont get updated
+            return False # Widget will not be created
         widget = kwargs.get('widget')
         # This Widget is an instance of the ExternalWidget class and has
         # a widget id (widget.widget_Id),
@@ -87,17 +92,51 @@ class ARandomWidgetClass(Widget):
     '''Another Widget which demonstrates that you don't have to
     name your Widgets like the class, you can also use the
     widget_name variable. This widgets will display an image from
-    a list of images, whose paths are given by the main app. If
-    the user clicks on the image, the next one is shown.'''
+    a list of images, whose paths are given by the main app. If the
+    user clicks on the image, the next one is shown. This widget
+    will show a configuration, before the widget will actually
+    get placed on the homescreen. The settings in the
+    'General settings' section are only available the first
+    time a widget of this type is created.
+    '''
     
     widget_name = 'MyImageWidget'
+    init_action = {
+        'title': 'Configuration',
+        'save_key': 'ImageWidgetConfig',
+        'children': [
+            {'type': 'text',         'text': 'General settings', 'text_color': [100,100,100], 'text_size': 20},
+            {'type': 'separator'},
+            {'type': 'switch',       'state': 1, 'text_on': 'Enabled', 'text_off': 'Disabled', 'desc': 'Auto update', 'hint': 'Check for new images every time the image gets changed.'},
+            {'type': 'num_input',    'default': 15, 'text_hint': 'On screen time for the images', 'disallow_negative': True, 'desc': 'Cycle time', 'hint': 'Set how often the widget should cycle trough the images.\nWarning: Setting this to a small number could overload the CPU!', 'hint_text_color': [255,140,0]},
+            {'type': 'text',         'text': 'Image displaying', 'text_color': [100,100,100], 'text_size': 20},
+            {'type': 'separator'},
+            {'type': 'list_option',  'options': ['As set by profile', 'Creationtime', 'Artist', 'Random'], 'desc': 'Sort by', 'hint': 'Sets the order the images should be displayed'},
+            {'type': 'text',         'text': 'No images', 'text_color': [100,100,100], 'text_size': 20},
+            {'type': 'separator'},
+            {'type': 'text_input',   'default': 'No images found', 'text_hint': 'e.g. "Got no images"', 'desc': 'No images warning', 'hint': 'The text that should get displayed if no images are given from the app.'},
+            {'type': 'color_picker', 'default': [255,200,50,255], 'transparent': True, 'desc': 'Warning color', 'hint': 'Set a text color for the warning.'},
+        ]
+    }
     
-    images = None
-    index  = -1
+    images      = None
+    indexes     = None
+    auto_update = True
+    update_time = 15
+    warnings    = None
+    sorting     = None
+    
     
     def __init__(self, *args, **kwargs):
         '''We get the image paths provided by our
-        main app and store it in self.images'''
+        main app and store it in self.images.
+        '''
+        # setup storage
+        self.images   = []
+        self.indexes  = {}
+        self.warnings = {}
+        self.sorting  = {}
+        
         self.update_images()
     
     def initWidget(self, *args, **kwargs):
@@ -105,64 +144,96 @@ class ARandomWidgetClass(Widget):
         print('Python: Init Widget...')
         if 'widget' not in kwargs:
             print('[ERROR] No widget passed in and thus can not get initialized!')
-            return False # Widget will show a 'failed' message and wont get updated
+            return False # Widget will not be created
         widget = kwargs.get('widget')
+        self.indexes[widget.widget_Id] = -1
+        
+        # Get the confiruration results
+        config = getWidgetData('ImageWidgetConfig').split(',')
+        
+        if len(self.init_action['children']) == 11: # If w haven't done this yet:
+            # Remove the section 'General settings', since its values are global for all MyImageWidgets.
+            self.init_action['children'] = self.init_action['children'][4:]
+            # Now we must notify the java side, that our desired init action has changed.
+            setInitAction(self.init_action)
+            # We extract the global values...
+            self.auto_update = unquote_plus(config[0]) in ['True', 'true']
+            self.update_time = unquote_plus(config[1])
+            # ... and remove them from the list, so that they are out of the way.
+            config = config[2:]
+        
+        # We extract our configuration results and store them (sorting is not implemented in this example!).
+        self.sorting[widget.widget_Id]  = ['As set by profile', 'Creationtime', 'Artist', 'Random'].index(unquote_plus(config[0]))
+        self.warnings[widget.widget_Id] = widget.canvas.TextView(text = (unquote_plus(config[1]) if config[1] != '' else 'No images found'), text_color = unquote_plus(config[2]), on_click = self.my_callback)
+        
+        # Finally, we try to displaye the first image
         self.next_image(widget)
         return True
     
     def my_callback(self, widget):
         '''A custom callback for the on_click event for my
         Widget. It could be named anything or could even
-        be a function from an other module.'''
+        be a function from an other module.
+        '''
         print('Python (my_callback): Got Input!')
+        # Display the next image
         self.next_image(widget)
     
     def next_image(self, widget):
         '''Show the next image.'''
         widget.canvas.clear()
-        if len(self.images) == 0:
-            # If we have no images, try to update our list
+        if len(self.images) == 0 or self.auto_update:
+            # If we have no images or if set by the use, try to update our list
             self.update_images()
         if len(self.images) == 0:
-            # If we didn't get any images
+            # If we didn't get any images from the update...
             print('No images')
-            widget.canvas.add(widget.canvas.TextView(text = 'No images found!', on_click = self.my_callback))
+            # ... set our warning, that we dont have any images to display.
+            widget.canvas.add(self.warnings[widget.widget_Id])
         else:
             print('Next image')
-            if self.index + 1 == len(self.images):
-                self.index = 0
+            # Figure out the next picture we should display from our list.
+            if self.indexes[widget.widget_Id] + 1 >= len(self.images):
+                self.indexes[widget.widget_Id] = 0
             else:
-                self.index += 1
-            widget.canvas.add(widget.canvas.ImageView(image_path = self.images[self.index], on_click = self.my_callback))
+                self.indexes[widget.widget_Id] += 1
+            # Add an ImageWidget to the canvas, displaying our image with an on_click callback to our callback-function.
+            widget.canvas.add(widget.canvas.ImageView(image_path = self.images[self.indexes[widget.widget_Id]], on_click = self.my_callback))
+        # Push the changes to the screen.
         widget.update()
     
     def update_images(self):
         '''We try to get the image paths provided
-        by our main app.'''
-        print('[Info] Getting stored Widget data')
-        data = getWidgetData()
-        # This returns the dict 'data' if the main app has called storeWidgetData(data),
-        # otherwise it returns None
-        #
-        # Warning: Every value in the data-dict was converted to a string
+        by our main app.
+        '''
+        print('[Info ] Getting stored image paths...')
+        # We try to get the data (if thers any) stored in the key 'image_paths'.
+        paths = getWidgetData('image_paths')
+        print('[Debug] Returned data: ' + str(paths))
+        if type(paths) != str:
+            # Well, our main app was not kind enough to deposit any data, so we have nothing to show.
+            print('[Info ] No image paths were stored.')
+            self.images = []
+            return
+        # We parse the urlencoded dict back to a normal dict
+        paths = dict(parse_qsl(paths))
+        
+        # This should get us the dict 'paths' if the main app has called storeWidgetData().
         #
         # In this example we want to get image paths which were set by the main app,
         # so we expect sth. like this:
         #
-        # data = {
-        #    'image_paths': '["path/to/image1", "path/to/image2"]'
-        #}
+        # paths = {
+        #    '0': 'path/to/image1',
+        #    '1': 'path/to/image2',
+        #    ...
+        # }
         
-        if type(data) == dict:
-            print('[Debug] Returned data: ' + str(data))
-            paths = data.get('image_paths', None)
-            if paths == None:
-                print('[Debug] Given data has no entry "image_paths"!')
-                self.images = []
-            else:
-                paths = paths[1:-1]
-                paths.replace('"', '')
-                self.images = paths.split(', ')
-        else:
-            print('[Debug] Got no data (' + str(data) + ').')
-            self.images = []
+        self.images = []
+        index = 0
+        while paths.has_key(str(index)):
+            # Adding every image path to our cache
+            self.images.append(paths[str(index)])
+            index += 1
+        # You would do the sorting here based on which sorting type the user has configured.
+        print("Got " + str(index) + " image paths.")

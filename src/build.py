@@ -612,7 +612,8 @@ def make_package(args):
     # Get widget information, if enabled
     widgets = []
     if args.widgets:
-        widgets = gather_widgets()
+        # TODO: Cleanup appwidgets source path before adding the new classes
+        widgets = gather_widgets() #FIXME: If a java widgetprovider class with same name allready exists, the file name will be changed but the class name will not, causing an error during compile
         build_widget_recources(widgets, 'src', 'res/layout')
     
     # Render the various templates into control files.

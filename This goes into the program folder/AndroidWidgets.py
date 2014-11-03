@@ -17,8 +17,10 @@ except Exception, msg:
             '''Fake class, so this can be used even if
             PythonWidgets is not present.'''
             def __getattr__(self, name):
-                print('a')
-                return lambda *args, **kwargs: True
+                if name in ['getWidgetData']:
+                    return lambda *args, **kwargs: None
+                else:
+                    return lambda *args, **kwargs: True
         PythonWidgets = t()
 else:
     print('[Debug] Success!')
@@ -42,8 +44,6 @@ class Widget(object):
     
     Action_StartApp     = '.StartActivity'
     # Starts the main app
-    Action_StartConfig  = '.StartConfig'
-    # Starts the main app with the argument 'config'
     
     ### defaults ###
     
@@ -155,13 +155,157 @@ class Widget(object):
     init_action         = None
     # None, True, string or dict
     # 
-    # !WIP!
-    # 
-    # Defines the (configuration-)
+    # Defines the configuration-
     # action which should be
     # performed before
     # Widget.initWidget gets
     # called.
+    #
+    # * If it's set to None,
+    #   no action will be performed.
+    # * If set to True, the main
+    #   app will get launched with
+    #   the argument '--show_config'
+    #   followed by the widgetId,
+    #   the widgetClassName and
+    #   the widgetName. The main App
+    #   must call
+    #   PythonWidgets.setConfigResult(True)
+    #   to indicate that the configuration
+    #   was successfull, otherwise the
+    #   widget won't be created.
+    # * If init_action is a string,
+    #   it behaves exactly like it
+    #   would be True, but the
+    #   given string is added to
+    #   the command arguments.
+    # * If init_action is a dict,
+    #   a simple config is launched
+    #   whose UI is defined by this
+    #   dict. The result of the
+    #   configuration is stored in
+    #   a string of the following
+    #   format:
+    #   'urlencoded_option_1,urlencoded_option_2,...'
+    #   and can be accessed by the
+    #   widget via getWidgetData(key)
+    #   with 'key' being either
+    #   the string located in
+    #   dict['save_key'] or it is
+    #   widgetClassName + widgetId
+    #   + '_config'.
+    #   All possibilities for the
+    #   dict are listed below:
+    #
+    #   {
+    #       'title': String # Window title; optional
+    #       'background': [r,b,g,a] # the color of the window background; a is optional; r, b, g, a must be integers between 0 and 255; optional
+    #       'save_key': String # The key where the config result will get saved; optional
+    #       'children': [ # The UI elements.
+    #                       Each UI element besides 'separator' and 'text' may have a description ('desc': String) and a hint ('hint': String) as well as 'desc_text_size' and 'desc_text_color', the same goes for the hint.
+    #                       Hints wont get displayed, if there is no description.
+    #                       The hints text size is half the normal text size by default. If you don't want this, just set 'hint_text_size' to 'default'.
+    #
+    #           {'type': 'separator'},
+    #           # Draws a separator line between the previous element and the next.
+    #           # Will not deposit any value in the result!
+    #
+    #           {'type': 'text', 'text': String, 'text_size': Integer, 'text_color': [r,g,b,a]},
+    #           # Displays text.
+    #           # Arguments:
+    #           #   text:       The text to display
+    #           #   text_size:  The text size, optional
+    #           #   text_color: The text color, a is optional, optional
+    #           # Will not deposit any value in the result!
+    #
+    #           {'type': 'togglebutton', 'text_on': String, 'text_off': String, 'state': 1/'on'/0/'off'},
+    #           # A button with two states, on and off
+    #           # Arguments:
+    #           #   text_on:  The text that should be displayed, if the buttons state is on,  optional
+    #           #   text_off: The text that should be displayed, if the buttons state is off, optional
+    #           #   state:    The initial state of the togglebutton, may be either 'on', 1, 'off' or 0, optional, defaults to 1
+    #           # Will deposit its state as one of the strings 'true' or 'false'
+    #
+    #           {'type': 'switch'},
+    #           # A switch with two states, on and off, Warning: Switches require android version 4.0 (ICE_CREAM_SANDWICH) or higher, a togglebutton is used instead
+    #           # Arguments:
+    #           #   see togglebutton
+    #           # Will deposit its state the same as a togglebutton.
+    #
+    #           {'type': 'seek_bar', 'default': Integer, 'min': Integer, 'max': Integer},
+    #           # A horizontal seekbar.
+    #           # Arguments:
+    #           #   default: The initial value of the seekbar, optional, defaults to 0
+    #           #   min:     The minimal allowed value,        optional, defaults to 0
+    #           #   max:     The maximal allowed value,        optional, defaults to 100
+    #           # Will deposit its value as a number.
+    #
+    #           {'type': 'text_input', 'default': String, 'text_hint': String, 'password': True/False, 'multiline': True/False},
+    #           # A textinput field
+    #           # Arguments:
+    #           #   default:   The text the textinput should hold when building the config UI
+    #           #   text_hint: A hint text, that will get displayed, if the textinput is empty, optional, defaults to ''
+    #           #   password:  If set to true, dots will be shown instead of the input,         optional, defaults to False
+    #           #   multiline: If set to True, allows the user to type in multiple lines,       optional, defaults to False
+    #           # Will deposit its value as a string.
+    #
+    #           {'type': 'num_input', 'default': String, 'text_hint': String, 'password': True/False, 'multiline': True/False, 'decimal': True/False, 'disallow_negative': True/False, 'min': Integer, 'max': Integer},
+    #           # Same as text_input, but only allows numbers, setting the virtual keyboard layout appropriate
+    #           # Arguments:
+    #           #   default, text_hint, password and multiline are the same as in text_input
+    #           #   !!! Warning: The password flag only works for android version 3.0 (HONEYCOMB) or higher !!!
+    #           #   decimal:            If set to True, allows a decimal point ('.') in the number-string, optional, defaults to False
+    #           #   disallow_negative:  Disallows negative numbers as an input,                            optional, defaults to False
+    #           #   !!! Warning: The above parameter will not work on android versions below 3.0 (HONEYCOMB) and will default to True. This means you can't input negative numbers on android versions prior to 3.0. Use the seebar to for those versions !!!
+    #           #   min:                The minimal allowed number,                                        optional, no limit by default
+    #           #   max:                The maximal allowed number,                                        optional, no limit by default
+    #           # Will deposit its value as a number.
+    #
+    #           {'type': 'mail_input', 'default': String, 'text_hint': String, 'password': True/False, 'multiline': True/False},
+    #           # Same as text_input, setting the virtual keyboard layout for mail input
+    #           # Arguments:
+    #           #   Same as text_input
+    #           # Will deposit its value the same as the text_input.
+    #
+    #           {'type': 'time_input', 'default': time, 'format': String, 'is24h': True/False},
+    #           # An input for hours and minutes
+    #           # Arguments:
+    #           #   default: The initial time to show, can be a timestamp (e.g. via time.time()) or a string in the following pattern 'hh:mm',        optional, defaults to the current time
+    #           #   format:  The format the time should get displayed,                                                                                optional, defaults to 'hh:mm a' (' a' depending on is24h)
+    #           #   !!! Warning: Will affect the way the time value will get stored in the result !!!
+    #           #   ... Info:    For format possibilities see 'http://docs.oracle.com/javase/6/docs/api/java/text/SimpleDateFormat.html' ...
+    #           #   is24h:   Controls weather the user should input hours from 0 to 24 or from 0 to 12 with am and pm, influences the default format, optional, defaults to True
+    #           # Will deposit its value as a string in the format given or 'hh:mm a'.
+    #
+    #           {'type': 'date_input', 'default': time, 'format': String},
+    #           # An input for dates; day, month, year
+    #           # Arguments:
+    #           #   default: Same as time_input, but the string is expected in the format 'dd.MM.yyyy'
+    #           #   format:  Same as time_input, but defaults to 'dd.MM.yyyy'
+    #           # Will deposit its value as a string in the format given or 'dd.MM.yyyy'.
+    #
+    #           {'type': 'web_input', 'default': String, 'text_hint': String, 'password': True/False, 'multiline': True/False},
+    #           # Same as text_input, setting the virtual keyboard layout appropriate
+    #           # Arguments:
+    #           #   Same as text_input
+    #           # Will deposit its value the same as the text_input.
+    #
+    #           {'type': 'list_option', 'default': String, 'options': list of strings, 'multioption': True/False},
+    #           # Lets the user choose from an list of options
+    #           # Arguments:
+    #           #   default:     The initial option to be picked, may or may not be in 'options', optional, defaults to the first element of 'options'
+    #           #   options:     The list of options the user can choose of
+    #           #   multioption: If set to True, the user is able to choose multiple options,     optional, defaults to False
+    #           # Will deposit its value as the chosen option string, or the chosen strings separated by ', '
+    #
+    #           {'type': 'color_picker', 'default': [r,g,b,a], 'transparent': True/False},
+    #           # Lets the user pick a color
+    #           # Arguments:
+    #           #   default:     The initial color as a list of [r,g,b,a], r, g, b and a are numbers from 0 to 255, a is optional and defaults to 255, optional, defaults to [0,0,0,255] (Black)
+    #           #   transparent: If set to True allows the user to chose the alpha channel, allowing him to set the color to fully transparent,        optional, defaults to False
+    #           # Will deposit its value as a hexadecimal number (e.g. ff000000 for a nontransparent Black).
+    #       ]
+    #   }
     
     sub_widgets         = []
     # list of dicts
@@ -192,24 +336,28 @@ class Widget(object):
         '''This function is called whenever a widget gets initialized and
         no other widgets are present and before 'initWidget' is called.
         You can use this function to get some data required for all your
-        widgets or to set the default loading and error view.'''
+        widgets or to set the error view.
+        '''
         pass
     
     def initWidget(self, *args, **kwargs):
         '''This function will initialize the given widget 'widget'
         and will set it's visual appearance. If this function
-        returns False, the initialisation is considered as failed
-        and an error view is displayed.'''
+        returns False or throws an error, the initialisation is
+        considered as failed and the widget will not be created.
+        '''
         return True
     
     def updateWidget(self, *args, **kwargs):
         '''This function gets called every time the widget receives
-        an update.'''
+        an update.
+        '''
         pass
     
     def destroyWidget(self, *args, **kwargs):
         '''This function is called if the user deletes a widget from
-        the home screen.'''
+        the home screen.
+        '''
         pass
 
 
@@ -220,7 +368,8 @@ def estimateSize(*args):
     Roughly convert from numbers of grid-cells
     on the homescreen to dp, using the
     formula 70 * num_cells - 30 given from
-    'http://developer.android.com/guide/practices/ui_guidelines/widget_design.html#cellstable'.'''
+    'http://developer.android.com/guide/practices/ui_guidelines/widget_design.html#cellstable'.
+    '''
     if len(args) == 1:
         return 70 * args[0] - 30
     if len(args) == 2:
@@ -232,7 +381,8 @@ def estimateSize(*args):
 def canvas_to_xml(canvas):
     '''>>> canvas_to_xml(canvas/canvas_str) -> xml_string
     Converts the given Canvas or Canvas-string 'canvas'
-    in a string containing an xml representation.'''
+    in a string containing an xml representation.
+    '''
     if type(canvas) == str:
         canvas = Canvas(canvas)
     alias = {
@@ -307,7 +457,8 @@ class CanvasBase(object):
         
         #--  Views:  --#
         'TextView':           {
-            'setText': lambda self, text: self._addOption('text', text)
+            'setText':      lambda self, text:  self._addOption('text', text),
+            'setTextColor': lambda self, color: self._addOption('text_color', color),
         },
         'AnalogClock':        {},
         'Button':             {},
@@ -382,7 +533,8 @@ class CanvasBase(object):
     def __repr__(self):
         '''Returns a representation of this CanvasObject and of all it's
         children that the java side can interpret and form the widgets
-        view from.'''
+        view from.
+        '''
         if type(self._repr) == str:
             return self._repr + '(' + (self._args if type(self._args) == str else '') + ')' + (str(self.children) if len(self.children) > 0 else '')
         if len(self.children) == 1:
@@ -392,7 +544,8 @@ class CanvasBase(object):
     
     def __call__(self, **kwargs):
         '''This is used to initialize a CanvasObject arguments
-        all at once.'''
+        all at once.
+        '''
         for key, value in kwargs.iteritems():
             if key == 'on_click' and callable(value):
                 PythonWidgets.addOnClick(str(id(self)), value)
@@ -404,7 +557,8 @@ class CanvasBase(object):
     
     def _addOption(self, name, value):
         '''Used to add one argument with the name 'name' and the
-        value 'value' to the stored arguments self._args.'''
+        value 'value' to the stored arguments self._args.
+        '''
         print('Adding option ' + name + ': ' + str(value))
         print(self._args, urlencode({name: ''}))
         index = self._args.find(urlencode({name: ''}))
@@ -428,7 +582,8 @@ class CanvasBase(object):
         '''>>> add(child[, index]) -> True or False
         Adds the CanvasObject 'child' at the given
         index 'index' or at the end, if no index was
-        given. Returns True on success, False on failure.'''
+        given. Returns True on success, False on failure.
+        '''
         if not isinstance(child, CanvasBase):
             print('[ERROR] Could not add child (' + str(child) + ') to the canvas because it is not a canvas object!')
             return False
@@ -457,14 +612,16 @@ class CanvasBase(object):
     
     def clear(self):
         '''>>> clear()
-        Clears all children from this CanvasObject.'''
+        Clears all children from this CanvasObject.
+        '''
         print('Clearing canvas...')
         self.children = []
     
     def remove(self, arg):
         '''>>> remove(index or CanvasObject) -> CanvasObject or True
         Removes the given CanvasObject 'arg' or the CanvasObject at the
-        index 'arg' from from the children list.'''
+        index 'arg' from from the children list.
+        '''
         
         if type(arg) == int:
             print('Removing child from index' + str(arg))
@@ -477,8 +634,8 @@ class CanvasBase(object):
 
 class CanvasObject(CanvasBase):
     '''This class represents an object which can be added to an
-    canvas and represents a view from the view-tree of a widget.'''
-    
+    canvas and represents a view from the view-tree of a widget.
+    '''
     
     def __init__(self, rep):
         '''Initializes the CanvasObject and sets its representation 'rep',
@@ -497,7 +654,6 @@ class CanvasObject(CanvasBase):
 class Canvas(CanvasBase):
     '''A representation of the empty canvas.'''
     
-    
     def __init__(self, canvas = None):
         print('Init Canvas...')
         super(Canvas, self).__init__(canvas)
@@ -506,7 +662,8 @@ class Canvas(CanvasBase):
 
 class ExternalWidget(object):
     '''Every instance of this class represents an existing widget on
-    the android home screen.'''
+    the android home screen.
+    '''
     
     widget_Id = -1
     canvas    = None
@@ -520,7 +677,8 @@ class ExternalWidget(object):
     
     def update(self):
         '''>>> update()
-        Pushes the current canvas to the screen.'''
+        Pushes the current canvas to the screen.
+        '''
         print('Method update of Widget ' + str(self.widget_Id) + ' is getting called.')
         print('[[[----------- Canvas: -----------]]]\n' + str(self.canvas))
         PythonWidgets.updateWidget(self.widget_Id, str(self.canvas))
@@ -531,7 +689,8 @@ def getWidget(widget_ID):
     '''>>> getWidget(widget_ID) -> widget or None
     This function returns an instance that represents
     the widget with the id 'widget_ID' or None,
-    if no widget with the given id exists.'''
+    if no widget with the given id exists.
+    '''
     print('getWidget is called, widget_ID is ' + str(widget_ID))
     if PythonWidgets.existWidget(widget_ID): # See if our widget_Id is in the list
         print('Widget Id exists, creating ext widget...')
@@ -546,7 +705,8 @@ def getDefaultError():
     Returns the default view that is shown, if
     the initialisation of a widget failed; if
     the initWidget function did not return True
-    or if it throws an error.'''
+    or if it throws an error.
+    '''
     err_view = PythonWidgets.getDefaultErrorView()
     if err_view == None:
         return None
@@ -559,21 +719,39 @@ def setDefaultError(canvas = None):
     the initialisation of a widget failed; if
     the initWidget function did not return True
     or if it throws an error. If no canvas is
-    given, a predefined default canvas is used.'''
+    given, a predefined default canvas is used.
+    '''
     if canvas and (not isinstance(canvas, CanvasBase)):
         print('[ERROR] Could not set the default error view because the given argument (' + str(canvas) + ' is not a Canvas!')
         return False
     print('Setting the default error view to ' + str(canvas))
     return PythonWidgets.setDefaultErrorView(str(canvas) if canvas else canvas)    
 
-def getWidgetData():
-    '''>>> getWidgetData() -> dict or None
-    Returns the dict, that was passed to
-    'storeWidgetData' in the main App or
-    None, if there is no data stored.'''
+def getWidgetData(key):
+    '''>>> getWidgetData(key) -> string or None
+    Returns the string, that was stored in the
+    key 'key' via 'storeWidgetData' or None, if
+    there is no data stored in that key.
+    '''
     print('Calling PythonWidgets.getWidgetData...')
-    data = PythonWidgets.getWidgetData()
-    if type(data) == str:
-        return dict(parse_qsl(data))
-    return None
-    
+    data = PythonWidgets.getWidgetData(key)
+    return data or None # Ignoring occoured errors (False --> None)
+
+def setWidgetData(key, data):
+    '''>>> setWidgetData(key, data) -> success
+    Stores 'data' in key 'key', to access it
+    later via getWidgetData. 'key' is eighter
+    the string to store or None, to remove the
+    data previously stored in the key.
+    '''
+    print('Calling PythonWidgets.storeWidgetData...')
+    return PythonWidgets.storeWidgetData(key, data)
+
+def setInitAction(new_action):
+    '''>>> getWidgetData() -> success
+    Setts the action, that shoul be performed, if
+    an widget from the current provider is created
+    by the user.
+    '''
+    print('Calling PythonWidgets.setInitAction...')
+    return PythonWidgets.setInitAction(new_action)
