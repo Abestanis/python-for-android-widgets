@@ -80,28 +80,24 @@ If you want to provide widgets, you need a 'WidgetProvider.py' file in your prog
       and the widgets. All events occurring for the widget will get
       passed down to the corresponding functions in this class.'''
       
-      def __init__(self, *args, **kwargs):
-          '''This function is called whenever a widget gets initialized and
-          no other widgets are present and before 'initWidget' is called.
-          You can use this function to get some data required for all your
-          widgets or to set the default loading and error view.'''
-          pass
-      
-      def initWidget(self, *args, **kwargs):
+      def __init__(self, widget = None):
           '''This function will initialize the given widget 'widget'
           and will set it's visual appearance. If this function
-          returns False, the initialisation is considered as failed
-          and an error view is displayed.'''
-          return True
-      
-      def updateWidget(self, *args, **kwargs):
-          '''This function gets called every time the widget receives
-          an update.'''
+          throws an error, the initialisation is considered as failed
+          and the widget will not be created.
+          '''
           pass
       
-      def destroyWidget(self, *args, **kwargs):
+      def updateWidget(self):
+          '''This function gets called every time the widget receives
+          an update.
+          '''
+          pass
+      
+      def destroyWidget(self):
           '''This function is called if the user deletes a widget from
-          the home screen.'''
+          the home screen.
+          '''
           pass
 
 An example 'WidgetProvider.py' is provided `here`_.
