@@ -957,7 +957,7 @@ do(x)
 			return null;
 		}
 		String type = item_description.get("type");
-		if ((android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.ICE_CREAM_SANDWICH || uiActivity.getApplicationInfo().targetSdkVersion <= 10) && type.equals("switch")) {
+		if (type.equals("switch") && (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.ICE_CREAM_SANDWICH || uiActivity.getApplicationInfo().targetSdkVersion <= 10)) {
 			Log.w(TAG, "Displaying a togglebutton insteat of a switch, because a switch requires android version 4.0 (ICE_CREAM_SANDWICH) or higher.");
 			type = "togglebutton";
 		}

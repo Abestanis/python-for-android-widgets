@@ -43,20 +43,25 @@ class HelloWorldWidget(Widget):
     
     
     
-    def __init__(self, *args, **kwargs):
-        print('Python: Init class...')
+    def __init__(self, widget = None):
+        '''First we set our default error view to
+        a Textview holding the text 'An error
+        occured!'. Afterwards we set the actual
+        view of the widget itself to a Textview
+        with the text 'Hello World' with an on
+        click callback which starts our main app.
+        '''
+        print('Python: Init Widget...')
         print('Hello World!')
-        setDefaultError(Canvas().TextView(text = 'An error occoured!'))
+        setDefaultError(Canvas().TextView(text = 'An error occured!'))
         print('Default Error:')
         print(getDefaultError())
-    
-    def initWidget(self, *args, **kwargs):
-        print('Python: Init Widget...')
-        if 'widget' not in kwargs:
+        
+        if widget == None:
             print('[ERROR] No widget passed in and thus can not get initialized!')
-            return False # Widget will not be created
-        widget = kwargs.get('widget')
-        # This Widget is an instance of the ExternalWidget class and has
+            raise ValueError("Unable to initialize widget provider without a given widget!") # Widget will not be created
+        
+        # 'widget' is an instance of the ExternalWidget class and has
         # a widget id (widget.widget_Id),
         # a canvas, which is empty at creation (widget.canvas) and
         # an update function, which pushes all changes made to the widgets canvas to the screen.
@@ -77,13 +82,12 @@ class HelloWorldWidget(Widget):
         # We push our changes to the screen
         widget.update()
         print('[Debug] Done.')
-        return True
     
-    def updateWidget(self, *args, **kwargs):
+    def updateWidget(self):
         print('Python: Updating Widget...')
         print('Hello World again!')
     
-    def destroyWidget(self, *args, **kwargs):
+    def destroyWidget(self):
         print('Python: Destroying Widget...')
         print('Goodby World, will miss you...')
     
@@ -96,7 +100,7 @@ class ARandomWidgetClass(Widget):
     user clicks on the image, the next one is shown. This widget
     will show a configuration, before the widget will actually
     get placed on the homescreen. The settings in the
-    'General settings' section are only available the first
+    'General' section are only available the first
     time a widget of this type is created.
     '''
     
@@ -105,83 +109,79 @@ class ARandomWidgetClass(Widget):
         'title': 'Configuration',
         'save_key': 'ImageWidgetConfig',
         'children': [
-            {'type': 'text',         'text': 'General settings', 'text_color': [100,100,100], 'text_size': 20},
+            {'type': 'text',         'text': 'General', 'text_color': [100,100,100], 'text_size': 20},
             {'type': 'separator'},
-            {'type': 'switch',       'state': 1, 'text_on': 'Enabled', 'text_off': 'Disabled', 'desc': 'Auto update', 'hint': 'Check for new images every time the image gets changed.'},
+            {'type': 'text',         'text': 'Some information that are only necessary, if there are no other widgets of this type placed on the home screen.'},
+            {'type': 'text',         'text': 'Image', 'text_color': [100,100,100], 'text_size': 20},
+            {'type': 'separator'},
+            {'type': 'switch',       'state': 1, 'desc': 'Auto update', 'hint': 'Check for new images every time the image gets changed.'},
             {'type': 'num_input',    'default': 15, 'text_hint': 'On screen time for the images', 'disallow_negative': True, 'desc': 'Cycle time', 'hint': 'Set how often the widget should cycle trough the images.\nWarning: Setting this to a small number could overload the CPU!', 'hint_text_color': [255,140,0]},
-            {'type': 'text',         'text': 'Image displaying', 'text_color': [100,100,100], 'text_size': 20},
-            {'type': 'separator'},
             {'type': 'list_option',  'options': ['As set by profile', 'Creationtime', 'Artist', 'Random'], 'desc': 'Sort by', 'hint': 'Sets the order the images should be displayed'},
-            {'type': 'text',         'text': 'No images', 'text_color': [100,100,100], 'text_size': 20},
+            {'type': 'text',         'text': 'Warning', 'text_color': [100,100,100], 'text_size': 20},
             {'type': 'separator'},
             {'type': 'text_input',   'default': 'No images found', 'text_hint': 'e.g. "Got no images"', 'desc': 'No images warning', 'hint': 'The text that should get displayed if no images are given from the app.'},
             {'type': 'color_picker', 'default': [255,200,50,255], 'transparent': True, 'desc': 'Warning color', 'hint': 'Set a text color for the warning.'},
         ]
     }
     
+    widget      = None
     images      = None
-    indexes     = None
+    index       = None
     auto_update = True
     update_time = 15
-    warnings    = None
+    warning     = None
     sorting     = None
     
     
-    def __init__(self, *args, **kwargs):
+    def __init__(self, widget):
         '''We get the image paths provided by our
-        main app and store it in self.images.
+        main app, store it in self.images and show
+        the first image.
         '''
-        # setup storage
-        self.images   = []
-        self.indexes  = {}
-        self.warnings = {}
-        self.sorting  = {}
-        
-        self.update_images()
-    
-    def initWidget(self, *args, **kwargs):
-        '''Show the first image.'''
         print('Python: Init Widget...')
-        if 'widget' not in kwargs:
-            print('[ERROR] No widget passed in and thus can not get initialized!')
-            return False # Widget will not be created
-        widget = kwargs.get('widget')
-        self.indexes[widget.widget_Id] = -1
         
-        # Get the confiruration results
+        # Setup image storage and index
+        self.images   = []
+        self.index    = -1
+        
+        # We need to store our widget to change its visuals later on
+        self.widget = widget
+        if widget == None:
+            print('[ERROR] No widget passed in and thus can not get initialized!')
+            raise ValueError("Unable to initialize widget provider without a given widget!") # Widget will not be created
+        
+        # Update our widgets to get our first data
+        self.update_images()
+        
+        # Get our confiruration results
         config = getWidgetData('ImageWidgetConfig').split(',')
         
-        if len(self.init_action['children']) == 11: # If w haven't done this yet:
-            # Remove the section 'General settings', since its values are global for all MyImageWidgets.
-            self.init_action['children'] = self.init_action['children'][4:]
-            # Now we must notify the java side, that our desired init action has changed.
-            setInitAction(self.init_action)
-            # We extract the global values...
-            self.auto_update = unquote_plus(config[0]) in ['True', 'true']
-            self.update_time = unquote_plus(config[1])
-            # ... and remove them from the list, so that they are out of the way.
-            config = config[2:]
+        # Remove the section 'General', since the information shown there is no longer needed.
+        self.init_action['children'] = self.init_action['children'][3:]
+        # Now we must notify the java side, that our desired init action has changed.
+        setInitAction(self.init_action)
         
         # We extract our configuration results and store them (sorting is not implemented in this example!).
-        self.sorting[widget.widget_Id]  = ['As set by profile', 'Creationtime', 'Artist', 'Random'].index(unquote_plus(config[0]))
-        self.warnings[widget.widget_Id] = widget.canvas.TextView(text = (unquote_plus(config[1]) if config[1] != '' else 'No images found'), text_color = unquote_plus(config[2]), on_click = self.my_callback)
+        self.auto_update = unquote_plus(config[0]) in ['True', 'true']
+        self.update_time = unquote_plus(config[1])
+        self.sorting     = ['As set by profile', 'Creationtime', 'Artist', 'Random'].index(unquote_plus(config[2]))
+        self.warning     = widget.canvas.TextView(text = (unquote_plus(config[3]) if config[3] != '' else 'No images found'), text_color = unquote_plus(config[4]), on_click = self.my_callback)
         
         # Finally, we try to displaye the first image
-        self.next_image(widget)
-        return True
+        self.next_image()
     
-    def my_callback(self, widget):
+    def my_callback(self):
         '''A custom callback for the on_click event for my
         Widget. It could be named anything or could even
         be a function from an other module.
         '''
         print('Python (my_callback): Got Input!')
         # Display the next image
-        self.next_image(widget)
+        self.next_image()
     
-    def next_image(self, widget):
+    def next_image(self):
         '''Show the next image.'''
-        widget.canvas.clear()
+        self.widget.canvas.clear()
         if len(self.images) == 0 or self.auto_update:
             # If we have no images or if set by the use, try to update our list
             self.update_images()
@@ -189,18 +189,18 @@ class ARandomWidgetClass(Widget):
             # If we didn't get any images from the update...
             print('No images')
             # ... set our warning, that we dont have any images to display.
-            widget.canvas.add(self.warnings[widget.widget_Id])
+            self.widget.canvas.add(self.warnings)
         else:
             print('Next image')
             # Figure out the next picture we should display from our list.
-            if self.indexes[widget.widget_Id] + 1 >= len(self.images):
-                self.indexes[widget.widget_Id] = 0
+            if self.index + 1 >= len(self.images):
+                self.index = 0
             else:
-                self.indexes[widget.widget_Id] += 1
+                self.index += 1
             # Add an ImageWidget to the canvas, displaying our image with an on_click callback to our callback-function.
-            widget.canvas.add(widget.canvas.ImageView(image_path = self.images[self.indexes[widget.widget_Id]], on_click = self.my_callback))
+            self.widget.canvas.add(self.widget.canvas.ImageView(image_path = self.images[self.index], on_click = self.my_callback))
         # Push the changes to the screen.
-        widget.update()
+        self.widget.update()
     
     def update_images(self):
         '''We try to get the image paths provided
@@ -230,10 +230,10 @@ class ARandomWidgetClass(Widget):
         # }
         
         self.images = []
-        index = 0
-        while paths.has_key(str(index)):
+        i = 0
+        while paths.has_key(str(i)):
             # Adding every image path to our cache
-            self.images.append(paths[str(index)])
-            index += 1
+            self.images.append(paths[str(i)])
+            i += 1
         # You would do the sorting here based on which sorting type the user has configured.
-        print("Got " + str(index) + " image paths.")
+        print("Got " + str(i) + " image paths.")

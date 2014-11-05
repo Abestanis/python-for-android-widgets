@@ -157,9 +157,8 @@ class Widget(object):
     # 
     # Defines the configuration-
     # action which should be
-    # performed before
-    # Widget.initWidget gets
-    # called.
+    # performed before the
+    # Widget gets instantiated.
     #
     # * If it's set to None,
     #   no action will be performed.
@@ -333,20 +332,12 @@ class Widget(object):
     #     ]
     
     def __init__(self, *args, **kwargs):
-        '''This function is called whenever a widget gets initialized and
-        no other widgets are present and before 'initWidget' is called.
-        You can use this function to get some data required for all your
-        widgets or to set the error view.
-        '''
-        pass
-    
-    def initWidget(self, *args, **kwargs):
         '''This function will initialize the given widget 'widget'
         and will set it's visual appearance. If this function
-        returns False or throws an error, the initialisation is
-        considered as failed and the widget will not be created.
+        throws an error, the initialisation is considered as failed
+        and the widget will not be created.
         '''
-        return True
+        pass
     
     def updateWidget(self, *args, **kwargs):
         '''This function gets called every time the widget receives
