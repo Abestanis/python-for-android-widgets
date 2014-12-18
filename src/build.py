@@ -336,6 +336,8 @@ def build_widget_recources(widgets, src_path, layout_path):
     src_path    = src_path.replace('\'', '\\\'')
     src_path   += sep + 'org' + sep + 'renpy' + sep + 'appwidgets'
     layout_path = layout_path.replace('\'', '\\\'')
+    if not exists(src_path): # git doesn't sync empty dirs
+        os.mkdir(src_path)
     
     # java provider
     

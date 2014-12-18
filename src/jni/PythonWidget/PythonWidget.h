@@ -63,10 +63,10 @@ JNIEXPORT jboolean JNICALL Java_org_renpy_android_PythonWidgetProvider_nativeini
 /*
  * Class:     org_renpy_android_PythonWidgetProvider
  * Method:    nativeupdateWidget
- * Signature: (ILjava/lang/String;I)V
+ * Signature: (ILjava/lang/String;II)V
  */
 JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativeupdateWidget
-  (JNIEnv *, jobject, jint, jstring, jint);
+  (JNIEnv *, jobject, jint, jstring, jint, jint);
 
 /*
  * Class:     org_renpy_android_PythonWidgetProvider
@@ -104,14 +104,15 @@ JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativePythonC
 #define msgassert(x, message) { if (!x) { __android_log_print(ANDROID_LOG_ERROR, "android_jni", "Assertion failed: %s. %s:%d", message, __FILE__, __LINE__); abort(); }}
 
 
-static PyObject *PythonWidgets_updateWidget(   PyObject *self, PyObject *args);
-static PyObject *PythonWidgets_existWidget(    PyObject *self, PyObject *args);
-static PyObject *PythonWidgets_getDfltErrView( PyObject *self, PyObject *args);
-static PyObject *PythonWidgets_setDfltErrView( PyObject *self, PyObject *args);
-static PyObject *PythonWidgets_storeWidgetData(PyObject *self, PyObject *args);
-static PyObject *PythonWidgets_getWidgetData(  PyObject *self, PyObject *args);
-static PyObject *PythonWidgets_addOnClickCallb(PyObject *self, PyObject *args);
-static PyObject *PythonWidgets_setInitAction(  PyObject *self, PyObject *args);
+static PyObject *PythonWidgets_updateWidget(         PyObject *self, PyObject *args);
+static PyObject *PythonWidgets_existWidget(          PyObject *self, PyObject *args);
+static PyObject *PythonWidgets_storeWidgetData(      PyObject *self, PyObject *args);
+static PyObject *PythonWidgets_getWidgetData(        PyObject *self, PyObject *args);
+static PyObject *PythonWidgets_addOnClickCallb(      PyObject *self, PyObject *args);
+static PyObject *PythonWidgets_setInitAction(        PyObject *self, PyObject *args);
+static PyObject *PythonWidgets_setSingleUpdate(      PyObject *self, PyObject *args);
+static PyObject *PythonWidgets_setPeriodicUpdateFreq(PyObject *self, PyObject *args);
+static PyObject *PythonWidgets_getPeriodicUpdateFreq(PyObject *self, PyObject *args);
 
 PyMODINIT_FUNC initPythonWidgets(void);
 

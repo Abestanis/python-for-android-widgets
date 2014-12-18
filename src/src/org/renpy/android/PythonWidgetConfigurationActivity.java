@@ -7,10 +7,7 @@ package org.renpy.android;
  * Copyright 2014 Sebastian Scholz <abestanis.gc@gmail.com> 
  */
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.Calendar;
-
 import android.app.Activity;
 import android.appwidget.AppWidgetManager;
 import android.content.Intent;
@@ -67,31 +64,7 @@ public class PythonWidgetConfigurationActivity extends Activity {
 			finish();
         	return;
         }
-        
-		try {
-			Method method = providerClass.getMethod("getProviderId");
-			providerId = (Integer) method.invoke(providerInstance);
-		} catch (NoSuchMethodException e) {
-			Log.e(TAG, "Unable to get the provider id from widget provider " + providerName + " (" + providerClass.toString() + ")!");
-			e.printStackTrace();
-			finish();
-			return;
-		} catch (IllegalAccessException e) {
-			Log.e(TAG, "Have no permission to get the provider id from widget provider " + providerName + " (" + providerClass.toString() + ")!");
-			e.printStackTrace();
-			finish();
-			return;
-		} catch (IllegalArgumentException e) {
-			Log.e(TAG, "The function getProviderId from widget provider " + providerName + " (" + providerClass.toString() + ") shoul not need accept arguments, but it does!");
-			e.printStackTrace();
-			finish();
-			return;
-		} catch (InvocationTargetException e) {
-			Log.e(TAG, "Something went wrong while caling getProviderId from widget provider " + providerName + " (" + providerClass.toString() + ")!");
-			e.printStackTrace();
-			finish();
-			return;
-		}
+        providerId = providerInstance.getProviderId();
 		
 		Log.i(TAG, "Configure Widget " + appWidgetId + " from widgetprovider " + providerName + "(class = " + className + ", id = " + providerId + ").");
 		
@@ -124,7 +97,6 @@ public class PythonWidgetConfigurationActivity extends Activity {
 			initWidget();
 		} else if (action.equals("True") || action.startsWith("argv:")) {
 			// Launch the configuration in the main app
-			String add = "";
 			// We can't use "--show_config" because kivy throws an error if it finds an argument which it does not recognize, if it starts with an '-'.
 			// TODO: Work on a solution.
 			if (action.startsWith("argv:")) {
@@ -170,17 +142,17 @@ public class PythonWidgetConfigurationActivity extends Activity {
 			providerClass = Class.forName(className);
 		} catch (ClassNotFoundException e) {
 			e.printStackTrace();
-			Log.e(TAG, "Did not find WidgetProvider " + providerName + " (" + className + "), you might need to reinstall yout app!");
+			Log.e(TAG, "Did not find WidgetProvider " + providerName + " (" + className + "), you might need to reinstall your app!");
 			return;
 		}
 		
 		try {
 			providerInstance = (PythonWidgetProvider) providerClass.newInstance();
 		} catch (InstantiationException e) {
-			Log.e(TAG, "Unable to instanciate java proxy provider " + providerName + " for " + className);
+			Log.e(TAG, "Unable to instantiate java proxy provider " + providerName + " for " + className);
 			e.printStackTrace();
 		} catch (IllegalAccessException e) {
-			Log.e(TAG, "Could not instanciate java proxy provider " + providerName + "(" + className + "), have no access!");
+			Log.e(TAG, "Could not instantiate java proxy provider " + providerName + "(" + className + "), have no access!");
 			e.printStackTrace();
 		}
     }

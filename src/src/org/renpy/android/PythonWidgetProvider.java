@@ -15,21 +15,20 @@ import android.app.Activity;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Calendar;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Vector;
 
 import org.test.Instagram_Feed.R;
 import org.renpy.android.RmView;
+import org.renpy.android.PythonWidgetService;
 
 import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
 import android.app.AlarmManager;
+import android.app.PendingIntent;
 import android.appwidget.AppWidgetManager;
 import android.appwidget.AppWidgetProvider;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -67,22 +66,27 @@ public class PythonWidgetProvider extends AppWidgetProvider {
     }
     */
 	
-	private static final String  TAG 				    = "PythonWidgets";
-	protected      final String  WIDGET_NAME  		    = null;
-    protected      final String  WIDGET_CLASS 		    = null;
-    protected 	   final Integer PROVIDER_ID 		    = null;
-	public 	static final String  PERIODIC_WIDGET_UPDATE = "com.pythonapp.widget.PYTHONWIDGET_CLOCK_WIDGET_UPDATE";
-	public 	static final String  WIDGET_INPUT_UPDATE    = "com.pythonapp.widget.PYTHONWIDGET_INPUT_WIDGET_UPDATE";
-	public 	static final String  WIDGET_INIT_UPDATE     = "com.pythonapp.widget.PYTHONWIDGET_INIT_WIDGET_UPDATE";
-	public  static final String  WIDGET_DATA_STORAGE    = "PythonWidgetData";
-	private static 		 boolean PythonInitialized      = false;
-	private static 		 int     _globalnumWidgets	    = 0;
+	public  static final String  TAG 				 = "PythonWidgets";
+	protected      final String  WIDGET_NAME  		 = null;
+    protected      final String  WIDGET_CLASS 		 = null;
+    protected 	   final Integer PROVIDER_ID 	     = null;
+	public 	static final String  CLOCK_WIDGET_UPDATE = "com.pythonapp.widget.PYTHONWIDGET_CLOCK_WIDGET_UPDATE";
+	public 	static final String  WIDGET_INPUT_UPDATE = "com.pythonapp.widget.PYTHONWIDGET_INPUT_WIDGET_UPDATE";
+	public 	static final String  WIDGET_INIT_UPDATE  = "com.pythonapp.widget.PYTHONWIDGET_INIT_WIDGET_UPDATE";
+	public  static final String  WIDGET_DATA_STORAGE = "PythonWidgetData";
+	private static 		 boolean PythonInitialized   = false;
+	private static 		 int     _globalnumWidgets	 = 0;
 	
 	private static		 Context myContext;
-	public  static 		 Map<Integer, ArrayList<Integer>> data   = new HashMap<Integer, ArrayList<Integer>>();
-	private static 		 Map<Integer, String> _defaultErrorViews = new HashMap<Integer, String>();
-	private static 		 Map<Integer, Integer> _updatefreqs      = new HashMap<Integer, Integer>();// TODO: Make this accessible from the python side
-	public  static 		 Map<Integer, String> _initActions       = new HashMap<Integer, String>();
+	public  static 		 Map<Integer, ArrayList<Integer>> data         	  = new HashMap<Integer, ArrayList<Integer>>();
+	private static 		 Map<Integer, Map<Integer, Integer>> _updatefreqs = new HashMap<Integer, Map<Integer, Integer>>();
+	public  static 		 Map<Integer, String> _initActions                = new HashMap<Integer, String>();
+	
+	public  static enum UpdateType {
+		ONETIME,
+		INTERVAL,
+		HARD,
+	}
 	
 	/*
 	 * Design of the string representation of the widgets views:
@@ -93,8 +97,6 @@ public class PythonWidgetProvider extends AppWidgetProvider {
 	 * 
 	 * LinearLayout()[TextView('text': '123'), TextView('text': '456')]
 	 */
-	
-	// TODO: Re-add Clock updates
 	
 	static {
 		Log.i(TAG, "Loading Python environment...");
@@ -131,7 +133,7 @@ public class PythonWidgetProvider extends AppWidgetProvider {
 				}
 			} else {
 				//Else inform the Python Side that an Update occur
-				updateWidget(context, appWidgetManager, appWidgetIds[i]);
+				updateWidget(context, appWidgetManager, appWidgetIds[i], UpdateType.HARD.ordinal());
 			};
 		}
 	}
@@ -139,10 +141,10 @@ public class PythonWidgetProvider extends AppWidgetProvider {
 	public void onAppWidgetOptionsChanged(Context context, AppWidgetManager appWidgetManager, int appWidgetId, Bundle newOptions) {
 		/*This is called when the widget is first placed and any time the widget is resized. You can use this callback to show or hide content based on the widget's size ranges. You get the size ranges by calling getAppWidgetOptions(), which returns a Bundle that includes the following:
 		
-		OPTION_APPWIDGET_MIN_WIDTH—Contains the lower bound on the current width, in dp units, of a widget instance.
-		OPTION_APPWIDGET_MIN_HEIGHT—Contains the lower bound on the current height, in dp units, of a widget instance.
-		OPTION_APPWIDGET_MAX_WIDTH—Contains the upper bound on the current width, in dp units, of a widget instance.
-		OPTION_APPWIDGET_MAX_HEIGHT—Contains the upper bound on the current width, in dp units, of a widget instance.
+		OPTION_APPWIDGET_MIN_WIDTH  - Contains the lower bound on the current width, in dp units, of a widget instance.
+		OPTION_APPWIDGET_MIN_HEIGHT - Contains the lower bound on the current height, in dp units, of a widget instance.
+		OPTION_APPWIDGET_MAX_WIDTH  - Contains the upper bound on the current width, in dp units, of a widget instance.
+		OPTION_APPWIDGET_MAX_HEIGHT - Contains the upper bound on the current width, in dp units, of a widget instance.
 		This callback was introduced in API Level 16 (Android 4.1). If you implement this callback, make sure that your app doesn't depend on it since it won't be called on older devices.
 		*/
 		//super.onAppWidgetOptionsChanged(context, appWidgetManager, appWidgetId, newOptions);
@@ -158,20 +160,22 @@ public class PythonWidgetProvider extends AppWidgetProvider {
 		
 		Log.d(TAG, "onDeleted called, args: Context " + context + ", AppWidgetIDs " + Arrays.toString(appWidgetIds));
 		
-		List<int[]> WidgetIds = Arrays.asList(appWidgetIds);
 		ArrayList<Integer> myWidgets = data.get(getProviderId());
-		ArrayList<Integer> removeIds = new ArrayList<Integer>();
 		
-		if (!(myWidgets == null)) {
-			for (Integer widgetId : myWidgets) {
-				if (!WidgetIds.contains(widgetId)) {
-					removeIds.add(widgetId);
+		if (myWidgets != null) {
+			for (Integer id : appWidgetIds) {
+				nativedestroyWidget(getProviderId(), getWidgetClass(), id);
+				myWidgets.remove(Integer.valueOf(id));
+				_globalnumWidgets--;
+				if (_updatefreqs.containsKey(getProviderId()) && _updatefreqs.get(getProviderId()).containsKey(id)) {
+					Log.d(TAG, "Stopping periodic update service for widget " + id + " (if there was one).");
+					AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+					Intent alarmIntent = new Intent(context, PythonWidgetService.class);
+					alarmIntent.putExtra("widgetId", id);
+					alarmIntent.putExtra("type", UpdateType.INTERVAL.ordinal());
+					alarmManager.cancel(PendingIntent.getService(context, id, alarmIntent, 0));
+		       		_updatefreqs.get(getProviderId()).remove(id);
 				}
-			}
-			for (Integer id : removeIds) {
-					nativedestroyWidget(getProviderId(), getWidgetClass(), id);
-					myWidgets.remove(Integer.valueOf(id));
-					_globalnumWidgets--;
 			}
 		}
 		Log.i(TAG, "Number of widgets: " + _globalnumWidgets);
@@ -180,17 +184,14 @@ public class PythonWidgetProvider extends AppWidgetProvider {
 	public void onEnabled(Context context) {
 		/*This is called when an instance the App Widget is created for the first time. For example, if the user adds two instances of your App Widget, this is only called the first time. If you need to open a new database or perform other setup that only needs to occur once for all App Widget instances, then this is a good place to do it.
 		 */
-		
-		if (_defaultErrorViews.containsKey(getProviderId())) {
+		super.onEnabled(context);
+		if (data.containsKey(getProviderId())) {
 			Log.w(TAG, "Provider " + getWidgetName() + " allready initialized!");
 			return;
 		}
-		
-		super.onEnabled(context);
 		Log.d(TAG, "onEnabled called, args: Context " + context);
 		
-		_defaultErrorViews.put(getProviderId(), null);
-		_updatefreqs.put(getProviderId(), -1);
+		_updatefreqs.put(getProviderId(), new HashMap<Integer, Integer>());
 		_initActions.put(getProviderId(), null);
 		
 		//Load Python widget provider
@@ -213,15 +214,10 @@ public class PythonWidgetProvider extends AppWidgetProvider {
         nativeendProvider(getProviderId(), getWidgetClass());
         
         data.remove(getProviderId());
-		_defaultErrorViews.remove(getProviderId());
 		_updatefreqs.remove(getProviderId());
 		_initActions.remove(getProviderId());
         
         if (_globalnumWidgets <= 0) {
-//			Log.i(TAG, "Stopping WidgetUpdate service...");
-//			AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
-//	        alarmManager.cancel(PendingIntent.getBroadcast(context, 0, new Intent(PERIODIC_WIDGET_UPDATE), PendingIntent.FLAG_UPDATE_CURRENT));
-	        
 	        Log.i(TAG, "Unloading Python environment...");
 			nativeend();
 			PythonInitialized = false;
@@ -235,10 +231,8 @@ public class PythonWidgetProvider extends AppWidgetProvider {
 		
 		myContext = context;
 		if (!PythonInitialized) {
-			PythonInitialized = true;
-	        
 			//initializing Python Environment
-	      	
+			PythonInitialized = true;
 			Log.d(TAG, "Initializing Python...");
 			
 			File mPath;
@@ -250,27 +244,28 @@ public class PythonWidgetProvider extends AppWidgetProvider {
 	      		
 	      	// ANDROID_PRIVATE, ANDROID_ARGUMENT
 	      	nativeinit(context.getFilesDir().getAbsolutePath(), mPath.getAbsolutePath(), context.getFilesDir().getAbsolutePath() + ":" + mPath.getAbsolutePath() + "/lib");
-	        
 		}
 		
 		Log.d(TAG, "onRecive called for " + getWidgetName() + " (" + getWidgetClass() + "), Received intent " + intent);
 	    super.onReceive(context, intent);
-	    if (PERIODIC_WIDGET_UPDATE.equals(intent.getAction())) {
+	    if (CLOCK_WIDGET_UPDATE.equals(intent.getAction())) {
 	    	ArrayList<Integer> myWidgets = data.get(getProviderId());
+	    	if (myWidgets == null) {
+				Log.w(TAG, "Providerdata is not initialized!");
+				data.put(getProviderId(), new ArrayList<Integer>());
+				myWidgets = data.get(getProviderId());
+			}
 	    	if (myWidgets.isEmpty()) {
 	    		Log.w(TAG, "Got Preriodic widget update, when no widgets were initialized!");
 	    		Log.i(TAG, myWidgets.toString());
 	    		return;
 	    	}
 	        Log.d(TAG, "Widget update");
-	        // Get the widget manager and Id's for this widget provider, then call the shared
-	        // clock update method.
-	        ComponentName thisAppWidget = new ComponentName(context.getPackageName(), getClass().getName());
+	        // Get the widget manager for this widget provider, then call the clock update method.
 	        AppWidgetManager appWidgetManager = AppWidgetManager.getInstance(context);
-	        int ids[] = appWidgetManager.getAppWidgetIds(thisAppWidget);
-	        for (int appWidgetID: ids) {
-	            updateWidget(context, appWidgetManager, appWidgetID);
-	        }
+	        int appWidgetId = intent.getIntExtra("widgetId", -1);
+	        int updateType = intent.getIntExtra("type", 1);
+	        updateWidget(context, appWidgetManager, appWidgetId, updateType);
 	    } else if (WIDGET_INPUT_UPDATE.equals(intent.getAction())) {
 	    	Log.i(TAG, "Got Widget_input event.");
 	    	String updateAction = intent.getStringExtra("UpdateAction");
@@ -303,6 +298,10 @@ public class PythonWidgetProvider extends AppWidgetProvider {
 	
 	public String getWidgetClass() {
 		return WIDGET_CLASS;
+	}
+	
+	public int getProviderId() {
+		return PROVIDER_ID;
 	}
 	
 	@TargetApi(Build.VERSION_CODES.HONEYCOMB)
@@ -360,17 +359,6 @@ public class PythonWidgetProvider extends AppWidgetProvider {
 		return myWidgets.contains(appWidgetId);
 	}
 	
-	public void setDefaultErrorView(String defaultview) {
-		Log.i(TAG, "Setting default error view: " + defaultview);
-		_defaultErrorViews.put(getProviderId(), defaultview);
-	}
-	
-	public String getDefaultErrorView() {
-		String _defaultErrorView = _defaultErrorViews.get(getProviderId());
-		Log.i(TAG, "Returning default error view: " + _defaultErrorView);
-		return _defaultErrorView;
-	}
-	
 	public void setInitAction(String action, boolean force) {
 		if (force || !(_initActions.containsKey(getProviderId())) || (_initActions.get(getProviderId()) == null)) {
 			Log.i(TAG, "Setting init action to " + action);
@@ -378,77 +366,33 @@ public class PythonWidgetProvider extends AppWidgetProvider {
 		}
 	}
 	
-	public int getProviderId() {
-		return PROVIDER_ID;
+	public void setSingleUpdate(int appWidgetId, int dtime) {
+		// dtime = delta time: time in ms from now, when the update should happen
+		// warning: If there previously was a single alarm requested by this appWidgetId, it's canceled by this one.
+		Log.d(TAG, "Setting up single update service for widget " + appWidgetId + ", scheduling in " + dtime + " ms.");
+		AlarmManager alarmManager = (AlarmManager) myContext.getSystemService(Context.ALARM_SERVICE);
+		Intent alarmIntent = new Intent(myContext, PythonWidgetService.class);
+		alarmIntent.putExtra("widgetId", appWidgetId);
+		alarmIntent.putExtra("type", UpdateType.ONETIME.ordinal());
+		alarmManager.set(AlarmManager.RTC, System.currentTimeMillis() + dtime, PendingIntent.getService(myContext, -appWidgetId, alarmIntent, 0));
+	}
+	
+	public void setPeriodicUpdateFreq(int appWidgetId, int freq) {
+		if (freq <= 0) {freq = -1;}
+		_updatefreqs.get(getProviderId()).put(appWidgetId, freq);
+	}
+	
+	public int getPeriodicUpdateFreq(int appWidgetId) {
+		if ((!_updatefreqs.containsKey(getProviderId())) || (!_updatefreqs.get(getProviderId()).containsKey(appWidgetId))) {
+			return -1;
+		}
+		return _updatefreqs.get(getProviderId()).get(appWidgetId);
 	}
 	
 	// Private functions
 	
 	private RemoteViews buildWidgetRemoteViews(int appWidgetId, String widgetview) {
 		Log.d(TAG, "(buildWidgetRemoteViews) Widgets View (" + appWidgetId + "): " + widgetview);
-		
-		if (widgetview == null) {
-			// Set widgetview to the user defined layout
-			Log.i(TAG, "Widget has no view, setting userdefined default error view if given...");
-			widgetview = _defaultErrorViews.get(getProviderId());
-		}
-		
-		
-//		String packageName = myContext.getPackageName();
-//		RemoteViews currentView = new RemoteViews(packageName, R.layout.widget_linearlayout);
-//		currentView.removeAllViews(R.id.widget_linearlayout);
-//		RemoteViews currentView2 = new RemoteViews(packageName, R.layout.widget_textview);
-//		currentView2.setTextViewText(R.id.widget_textview, String.valueOf(Calendar.getInstance().getTimeInMillis()));
-//		currentView.addView(R.id.widget_linearlayout, currentView2);
-//		if (true) {return currentView;}
-		
-		
-//		String packageName = myContext.getPackageName();
-//		RemoteViews currentView2 = new RemoteViews(packageName, R.layout.widget_textview);
-//		currentView2.setTextViewText(R.id.widget_textview, String.valueOf(Calendar.getInstance().getTimeInMillis()));
-//		if (true) {return currentView2;}
-		
-		
-//		String packageName = myContext.getPackageName();
-//		RemoteViews currentView = new RemoteViews(packageName, R.layout.widget_linearlayout);
-//		RemoteViews currentView2 = new RemoteViews(packageName, R.layout.widget_textview);
-//		currentView2.setTextViewText(R.id.widget_textview, String.valueOf(Calendar.getInstance().getTimeInMillis()));
-//		currentView.addView(R.id.widget_linearlayout, currentView2);
-//		if (true) {return currentView;}
-		
-		
-//		String packageName = myContext.getPackageName();
-//		Vector<RemoteViews> viewList = new Vector<RemoteViews>();
-//		RemoteViews currentView = new RemoteViews(packageName, R.layout.widget_linearlayout);
-//		viewList.add(currentView);
-//		RemoteViews currentView2 = new RemoteViews(packageName, R.layout.widget_textview);
-//		currentView2.setTextViewText(R.id.widget_textview, String.valueOf(Calendar.getInstance().getTimeInMillis()));
-//		RemoteViews tmp = viewList.lastElement();
-//		tmp.addView(R.id.widget_linearlayout, currentView2);
-//		viewList.set(viewList.size() - 1, tmp);
-//		if (viewList.size() > 1) {
-//			RemoteViews lastLayout = viewList.get(viewList.size() - 2);
-//			lastLayout.addView(R.id.widget_linearlayout, viewList.remove(viewList.size() - 1));
-//			viewList.set(viewList.size() - 1, lastLayout);
-//		}
-//		if (true) {return viewList.firstElement();}
-		
-		
-//		String packageName = myContext.getPackageName();
-//		Vector<WidgetView> viewList = new Vector<WidgetView>();
-//		WidgetView currentView = new WidgetView(packageName, "LinearLayout", ")", appWidgetId);
-//		viewList.add(currentView);
-//		WidgetView currentView2 = new WidgetView(packageName, "TextView", "text=".concat(String.valueOf(Calendar.getInstance().getTimeInMillis())).concat(")"), appWidgetId);
-//		WidgetView tmp = viewList.lastElement();
-//		tmp.addView(currentView2);
-//		viewList.set(viewList.size() - 1, tmp);
-//		if (viewList.size() > 1) {
-//			WidgetView lastLayout = viewList.get(viewList.size() - 2);
-//			lastLayout.addView(viewList.remove(viewList.size() - 1));
-//			viewList.set(viewList.size() - 1, lastLayout);
-//		}
-//		if (true) {return viewList.firstElement().view;}
-		
 		if (widgetview != null) {
 			Log.i(TAG, "Creating widget view!");
 			String packageName = myContext.getPackageName();
@@ -467,7 +411,7 @@ public class PythonWidgetProvider extends AppWidgetProvider {
 					widgetview = widgetview.substring(index + 1);
 					if (currentView.view == null) {
 						// An unknown View
-						// TODO: Set the view to the default error view 
+						// TODO: Set the view to the default error view?
 						break;
 					}
 					
@@ -500,13 +444,9 @@ public class PythonWidgetProvider extends AppWidgetProvider {
 			}
 			Log.w(TAG, "Something went wrong during the build of the widgets views: There is no view left in the queue: " + viewList);
 		}
-		// Set view to the hard-coded default cause the user has not defined a default error view
-		Log.i(TAG, "Setting layout to a hardcoded default error view.");
+		// Let android display an error view
+		Log.i(TAG, "Setting layout to an error view.");
 		return new RemoteViews(myContext.getPackageName(), R.id.widget_progressbar);
-	}
-	
-	private void startPythonService() {
-		Log.i(TAG, "Starting the Python Service.");
 	}
 	
 	private void initWidget(Context context, int appWidgetId) {
@@ -521,15 +461,41 @@ public class PythonWidgetProvider extends AppWidgetProvider {
 		_globalnumWidgets++;
 		
 		if (!nativeinitWidget(getProviderId(), getWidgetClass(), appWidgetId)) {
-			Log.w(TAG, "Widget initialisation failed!");
+			Log.w(TAG, "Widget initialization failed!");
 			data.get(getProviderId()).remove(Integer.valueOf(appWidgetId));
 			_globalnumWidgets--;
+		} else if (getPeriodicUpdateFreq(appWidgetId) != -1) {
+			int freq = getPeriodicUpdateFreq(appWidgetId);
+			Log.d(TAG, "Starting periodic update service for widget " + appWidgetId + ", scheduling every " + freq + " ms.");
+			AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+			Intent alarmIntent = new Intent(context, PythonWidgetService.class);
+			alarmIntent.putExtra("widgetId", appWidgetId);
+			alarmIntent.putExtra("type", UpdateType.INTERVAL.ordinal());
+        	alarmManager.setRepeating(AlarmManager.RTC, System.currentTimeMillis() + freq, freq, PendingIntent.getService(context, appWidgetId, alarmIntent, 0));
 		}
 	}
 	
-	private void updateWidget(Context context, AppWidgetManager appWidgetManager, int appWidgetId) {
+	private void updateWidget(Context context, AppWidgetManager appWidgetManager, int appWidgetId, int updateType) {
 		Log.i(TAG, "Update Widget " + appWidgetId + "...");
-		nativeupdateWidget(getProviderId(), getWidgetClass(), appWidgetId);
+		int tmp_freq = getPeriodicUpdateFreq(appWidgetId);
+		nativeupdateWidget(getProviderId(), getWidgetClass(), appWidgetId, updateType);
+		int freq = getPeriodicUpdateFreq(appWidgetId);
+		if ((tmp_freq != -1) && freq == -1) {
+			Log.d(TAG, "Stopping periodic update service for widget " + appWidgetId + ".");
+			AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+			Intent alarmIntent = new Intent(context, PythonWidgetService.class);
+			alarmIntent.putExtra("widgetId", appWidgetId);
+			alarmIntent.putExtra("type", UpdateType.INTERVAL.ordinal());
+        	alarmManager.cancel(PendingIntent.getService(context, appWidgetId, alarmIntent, 0));
+		} else if (tmp_freq != getPeriodicUpdateFreq(appWidgetId)) {
+			Log.d(TAG, "Starting/Changing periodic update service for widget " + appWidgetId + ", scheduling every " + freq + " ms.");
+			AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+			Intent alarmIntent = new Intent(context, PythonWidgetService.class);
+			alarmIntent.putExtra("widgetId", appWidgetId);
+			alarmIntent.putExtra("type", UpdateType.INTERVAL.ordinal());
+        	alarmManager.setRepeating(AlarmManager.RTC, System.currentTimeMillis() + freq, freq, PendingIntent.getService(context, appWidgetId, alarmIntent, 0));
+		}
+		
 	}
 
 	// Native functions
@@ -539,7 +505,7 @@ public class PythonWidgetProvider extends AppWidgetProvider {
 	public native void    nativeinitProvider(  int providerId, String className);
 	public native void    nativeendProvider(   int providerId, String className);
 	public native boolean nativeinitWidget(    int providerId, String className, int widgetId);
-	public native void    nativeupdateWidget(  int providerId, String className, int widgetId);
+	public native void    nativeupdateWidget(  int providerId, String className, int widgetId, int updateType);
 	public native void    nativedestroyWidget( int providerId, String className, int widgetId);
 	public native void 	  nativePythonCallback(int providerId, String className, int widgetId, String methodname);
 	

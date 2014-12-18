@@ -7,7 +7,7 @@
 # This file is an example for the WidgetProvider.py, which has to be in the programs directory.
 # We create 3 Widgets: HelloWorldWidget, HelloWorldWidgetLarge and MyImageWidget
 
-from AndroidWidgets import *
+from AndroidWidgets import canvas_to_xml, estimateSize, Canvas, Widget
 from urlparse       import parse_qsl
 from urllib         import unquote_plus
 
@@ -41,51 +41,64 @@ class HelloWorldWidget(Widget):
     # which will be 4x4 when the user places it on
     # the home screen, instead of 2x2.
     
+    num_interval_updates = 0
+    num_singletime_updates = 0
     
-    
-    def __init__(self, widget = None):
-        '''First we set our default error view to
-        a Textview holding the text 'An error
-        occured!'. Afterwards we set the actual
-        view of the widget itself to a Textview
-        with the text 'Hello World' with an on
-        click callback which starts our main app.
+    def __init__(self, widget_Id):
+        '''We set the view of the widget
+        to a Textview with the text
+        'Hello World' with an on click
+        callback which starts our main app.
         '''
         print('Python: Init Widget...')
+        super(HelloWorldWidget, self).__init__(widget_Id)
         print('Hello World!')
-        setDefaultError(Canvas().TextView(text = 'An error occured!'))
-        print('Default Error:')
-        print(getDefaultError())
-        
-        if widget == None:
-            print('[ERROR] No widget passed in and thus can not get initialized!')
-            raise ValueError("Unable to initialize widget provider without a given widget!") # Widget will not be created
-        
-        # 'widget' is an instance of the ExternalWidget class and has
-        # a widget id (widget.widget_Id),
-        # a canvas, which is empty at creation (widget.canvas) and
-        # an update function, which pushes all changes made to the widgets canvas to the screen.
-        print('My widget ID: ', widget.widget_Id)
+        print('My widget ID: ', widget_Id)
         
         print('[Debug] Clearing canvas...')
-        widget.canvas.clear()
+        self.canvas.clear()
         print('[Debug] Done. Creating LinearLayout...')
-        layout = widget.canvas.LinearLayout()
-        print('[Debug] Done. Adding TextView...')
+        layout = self.canvas.LinearLayout()
+        print('[Debug] Done. Adding first TextView...')
         # Every view may have an on_click callback, which must be callable
         # or a special action defined in the Widget class like
         # 'Action_StartApp', which starts the main app.
         layout.add(layout.TextView(text = 'Hello World', on_click = self.Action_StartApp))
+        print('[Debug] Done. Adding second TextView...')
+        layout.add(layout.TextView(text = 'Single-time updates: 0\nInterval updates: 0'))
         print('[Debug] Done. Adding Layout to canvas...')
-        widget.canvas.add(layout)
+        self.canvas.add(layout)
         print('[Debug] Done. Updating Widget...')
         # We push our changes to the screen
-        widget.update()
+        self.update_graphics()
         print('[Debug] Done.')
+        # We request an update in 5 seconds
+        self.schedule_once(5000)
+        # We also want an update every 12 seconds (starting in 12 seconds from now on)
+        self.schedule_interval(12000)
     
-    def updateWidget(self):
+    def updateWidget(self, updateType):
         print('Python: Updating Widget...')
         print('Hello World again!')
+        print('Update type is ' + ('OneTime_UpdateType' if updateType == self.OneTime_UpdateType else 'Interval_UpdateType' if updateType == self.Interval_UpdateType else 'Hard_UpdateType'))
+        if updateType == self.OneTime_UpdateType:
+            self.num_singletime_updates += 1
+            if self.num_singletime_updates <= 3:
+                self.schedule_once(5000)
+                # This means we schedule a onetime update 4 times, including the one time in __init__
+        elif updateType == self.Interval_UpdateType:
+            self.num_interval_updates += 1
+            if self.num_interval_updates == 5:
+                self.schedule_interval(6000)
+                # If we updated 5 times, change the frequency to 6 seconds
+            elif self.num_interval_updates == 10:
+                self.schedule_interval(-1)
+                # If we updated 10 times, stop it
+        layout = self.canvas.children[0] # we get the LinearLayout containing our both TextViews
+        layout.remove(1) # We remove the second TextView (The on containing our update timer counts) and readd it wirh the new values
+        layout.add(layout.TextView(text = 'Single-time updates: ' + str(self.num_singletime_updates) + '\nInterval updates: ' + str(self.num_interval_updates)))
+        self.update_graphics()
+        print('Update done!')
     
     def destroyWidget(self):
         print('Python: Destroying Widget...')
@@ -124,50 +137,49 @@ class ARandomWidgetClass(Widget):
         ]
     }
     
-    widget      = None
     images      = None
     index       = None
     auto_update = True
-    update_time = 15
     warning     = None
     sorting     = None
     
     
-    def __init__(self, widget):
+    def __init__(self, widget_Id):
         '''We get the image paths provided by our
         main app, store it in self.images and show
         the first image.
         '''
         print('Python: Init Widget...')
+        super(ARandomWidgetClass, self).__init__(widget_Id)
         
         # Setup image storage and index
         self.images   = []
         self.index    = -1
         
-        # We need to store our widget to change its visuals later on
-        self.widget = widget
-        if widget == None:
-            print('[ERROR] No widget passed in and thus can not get initialized!')
-            raise ValueError("Unable to initialize widget provider without a given widget!") # Widget will not be created
-        
-        # Update our widgets to get our first data
-        self.update_images()
-        
         # Get our confiruration results
-        config = getWidgetData('ImageWidgetConfig').split(',')
+        config = self.getWidgetData('ImageWidgetConfig').split(',')
         
         # Remove the section 'General', since the information shown there is no longer needed.
         self.init_action['children'] = self.init_action['children'][3:]
         # Now we must notify the java side, that our desired init action has changed.
-        setInitAction(self.init_action)
+        self.setInitAction(self.init_action)
         
         # We extract our configuration results and store them (sorting is not implemented in this example!).
         self.auto_update = unquote_plus(config[0]) in ['True', 'true']
-        self.update_time = unquote_plus(config[1])
+        update_time      = int(unquote_plus(config[1]))
         self.sorting     = ['As set by profile', 'Creationtime', 'Artist', 'Random'].index(unquote_plus(config[2]))
-        self.warning     = widget.canvas.TextView(text = (unquote_plus(config[3]) if config[3] != '' else 'No images found'), text_color = unquote_plus(config[4]), on_click = self.my_callback)
+        self.warning     = self.canvas.TextView(text = (unquote_plus(config[3]) if config[3] != '' else 'No images found'), text_color = unquote_plus(config[4]), on_click = self.my_callback)
+        
+        # To change the images on the screen we initialize an interval updater to update us every update_time seconds
+        self.schedule_interval(update_time * 1000)
         
         # Finally, we try to displaye the first image
+        self.next_image()
+    
+    def updateWidget(self, updateType):
+        '''This is called when its time to show the next
+        image.
+        '''
         self.next_image()
     
     def my_callback(self):
@@ -181,7 +193,7 @@ class ARandomWidgetClass(Widget):
     
     def next_image(self):
         '''Show the next image.'''
-        self.widget.canvas.clear()
+        self.canvas.clear()
         if len(self.images) == 0 or self.auto_update:
             # If we have no images or if set by the use, try to update our list
             self.update_images()
@@ -189,7 +201,7 @@ class ARandomWidgetClass(Widget):
             # If we didn't get any images from the update...
             print('No images')
             # ... set our warning, that we dont have any images to display.
-            self.widget.canvas.add(self.warnings)
+            self.canvas.add(self.warnings)
         else:
             print('Next image')
             # Figure out the next picture we should display from our list.
@@ -198,9 +210,9 @@ class ARandomWidgetClass(Widget):
             else:
                 self.index += 1
             # Add an ImageWidget to the canvas, displaying our image with an on_click callback to our callback-function.
-            self.widget.canvas.add(self.widget.canvas.ImageView(image_path = self.images[self.index], on_click = self.my_callback))
+            self.canvas.add(self.canvas.ImageView(image_path = self.images[self.index], on_click = self.my_callback))
         # Push the changes to the screen.
-        self.widget.update()
+        self.update_graphics()
     
     def update_images(self):
         '''We try to get the image paths provided
@@ -208,7 +220,7 @@ class ARandomWidgetClass(Widget):
         '''
         print('[Info ] Getting stored image paths...')
         # We try to get the data (if thers any) stored in the key 'image_paths'.
-        paths = getWidgetData('image_paths')
+        paths = self.getWidgetData('image_paths')
         print('[Debug] Returned data: ' + str(paths))
         if type(paths) != str:
             # Well, our main app was not kind enough to deposit any data, so we have nothing to show.
@@ -236,4 +248,4 @@ class ARandomWidgetClass(Widget):
             self.images.append(paths[str(i)])
             i += 1
         # You would do the sorting here based on which sorting type the user has configured.
-        print("Got " + str(i) + " image paths.")
+        print("[Info ] Got " + str(i) + " image paths.")

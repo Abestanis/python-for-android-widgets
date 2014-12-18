@@ -7,6 +7,7 @@ package org.renpy.android;
  * Copyright 2014 Sebastian Scholz <abestanis.gc@gmail.com> 
  */
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
@@ -55,18 +56,11 @@ public class RmView {
         //VIEWS.put("StackView", 		  new int[] {, });
         //VIEWS.put("AdapterViewFlipper", new int[] {, });
         VIEWS.put("ViewStub", 			new int[] {R.layout.widget_viewstub, 	   R.id.widget_viewstub});
-        
-        
-        // additional
-        
-        VIEWS.put("UrlImageView", 		new int[] {R.layout.widget_imageview, 	   R.id.widget_imageview});
-        
 	}
 	private static enum Args {
 		text,
 		on_click,
 		image_path,
-		image_url,
 		text_color,
 		visibility
 	}
@@ -145,6 +139,9 @@ public class RmView {
 					if (arg_val[1].equals(".StartActivity")) {
 						Log.i(TAG, "Setting on_click callback to launch the main App."); // TODO: If the main App is still open in cache, it is not able to open main.py
 						inputIntent = new Intent(context, PythonActivity.class);
+						if (android.os.Build.VERSION.SDK_INT > android.os.Build.VERSION_CODES.HONEYCOMB) {
+							inputIntent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
+						}
 			            pendingIntent = PendingIntent.getActivity(context, 0, inputIntent, PendingIntent.FLAG_UPDATE_CURRENT);
 					} else {
 						Log.i(TAG, "Setting on_click callback: " + arg_val[1]);
@@ -172,21 +169,19 @@ public class RmView {
 					break;
 				case image_path:
 					Log.i(TAG, "Setting image source to " + arg_val[1]);
-					Bitmap image = BitmapFactory.decodeFile(arg_val[1]);
+					Bitmap image = null;
+					File image_file = new File(arg_val[1]);
+					if(image_file.exists() && !image_file.isDirectory()) {
+						image = BitmapFactory.decodeFile(arg_val[1]);
+					}
+					if (image == null) {
+						// The image was not found on this device or it could not be loaded as a bitmap, maybe the given source is an URL?
+						image = downloadImage(arg_val[1]);
+					}
 					if (image != null) {
 						this.view.setImageViewBitmap(this.view_Id, image);
 					} else {
-						Log.e(TAG, "Failed loading the image located at the given path!");
-						// TODO: Set to missing Resource image?
-					}
-					break;
-				case image_url:
-					Log.i(TAG, "Setting image url_source to " + arg_val[1]);
-					Bitmap url_image = downloadImage(arg_val[1]);
-					if (url_image != null) {
-						this.view.setImageViewBitmap(this.view_Id, url_image);
-					} else {
-						Log.e(TAG, "Failed loading the image located at the given path!");
+						Log.e(TAG, "Failed loading the image located at " + arg_val[1] + "!");
 						// TODO: Set to missing Resource image?
 					}
 					break;

@@ -29,7 +29,406 @@ from types    import MethodType
 from urlparse import parse_qsl
 
 
-class Widget(object):
+def estimateSize(*args):
+    '''>>> estimateSize(num_cells) -> (dp)
+    or
+    >>> estimateSize(num_cells_x, num_cells_y) -> (dp, dp)
+    Roughly convert from numbers of grid-cells
+    on the homescreen to dp, using the
+    formula 70 * num_cells - 30 given from
+    'http://developer.android.com/guide/practices/ui_guidelines/widget_design.html#cellstable'.
+    '''
+    if len(args) == 1:
+        return 70 * args[0] - 30
+    if len(args) == 2:
+        return (70 * args[0] - 30, 70 * args[1] - 30)
+    else:
+        return -1
+    
+
+def canvas_to_xml(canvas):
+    '''>>> canvas_to_xml(canvas/canvas_str) -> xml_string
+    Converts the given Canvas or Canvas-string 'canvas'
+    in a string containing an xml representation.
+    '''
+    if type(canvas) == str:
+        canvas = Canvas(canvas)
+    alias = {
+        'image_path': 'src'
+    }
+    forbidden = [
+        'UrlImageView'
+    ]
+    print('[Debug] Converting ' + str(canvas) + ' to xml...')
+    
+    def children_to_xml(children):
+        xml = ''
+        
+        for child in children:
+            name = child._repr
+            if name in forbidden:
+                print('[ERROR]' + name + ' is not allowed in xml files!')
+                continue
+            xml += '<' + name + ' xmlns:android="http://schemas.android.com/apk/res/android"\n'
+            
+            # parameters
+            
+            size_width  = False
+            size_height = False
+            
+            for key, val in parse_qsl(child._args):
+                if key == 'on_click':
+                    print('[Warn ] "on_click" events are not supported in xml files.')
+                    continue
+                size_width  = key == 'width'  or size_width
+                size_height = key == 'height' or size_height
+                if key == 'image_path': # The image needs to be in the resource folder
+                    val = '{{% "' + val + '" %}}'
+                else:
+                    val = '"' + val + '"'
+                key = alias.get(key, key)
+                
+                xml += 'android:' + key + '=' + val + '\n'
+            if not size_width:
+                xml += 'android:layout_width="wrap_content"\n'
+            if not size_height:
+                xml += 'android:layout_height="wrap_content"\n'
+            
+            # children
+            
+            if len(child.children) != 0:
+                xml += '>\n\n'
+                xml += children_to_xml(child.children)
+                xml += '</' + name + '>\n\n'
+            else:
+                xml += '/>\n\n'
+        return xml
+    
+    
+    return children_to_xml(canvas.children)
+
+
+class CanvasBase(object):
+    '''This is the base class for every canvas Object.'''
+    
+    children = None
+    _repr = None
+    _args = None
+    
+    # All possible canvas objects
+    _canvasObjects = { # TODO: Finally implement the rest!!!
+        #-- Layouts: --#
+        'LinearLayout':       {},
+        'FrameLayout':        {},
+        'RelativeLayout':     {},
+        #'GridLayout':         {},
+        
+        #--  Views:  --#
+        'TextView':           {
+            'setText':      lambda self, text:  self._addOption('text', text),
+            'setTextColor': lambda self, color: self._addOption('text_color', color),
+        },
+        'AnalogClock':        {},
+        'Button':             {},
+        'Chronometer':        {},
+        'ImageButton':        {},
+        'ImageView':          {
+            'setImagePath': lambda self, source_path: self._addOption('image_path', source_path)
+        },
+        'ProgressBar':        {},
+        'ViewFlipper':        {},
+        'ListView':           {},
+        'GridView':           {},
+        #'StackView':          {},
+        #'AdapterViewFlipper': {},
+        'ViewStub':           {},
+    }
+    
+    def __init__(self, canvas = None):
+        self.children = []
+        self._args     = ''
+        if canvas:
+            print('Adding children given to __init__...')
+            if type(canvas) == str:
+                print('children given via string, decoding...')
+                canvas_stack = [Canvas()]
+                par_index = canvas.find('(')
+                while par_index != -1:
+                    print('---> Canvas: ' + canvas)
+                    view = canvas[:par_index]
+                    if not view in self._canvasObjects:
+                        print('[ERROR] Got unknown view object ' + view)
+                        canvas_stack = [Canvas()]
+                        break
+                    view = CanvasObject(view)
+                    par_end = canvas.find(')', par_index)
+                    if not par_index + 1 == par_end:
+                        # Parameter
+                        print('Parameter: ' + canvas[par_index + 1:par_end])
+                        view._args = canvas[par_index + 1:par_end]
+                    canvas = canvas[par_end + 1:]
+                    if canvas.startswith('['):
+                        canvas_stack.append(view)
+                        canvas = canvas[1:]
+                    else:
+                        canvas_stack[-1].add(view)
+                    if canvas[:2] == ', ':
+                        canvas = canvas[2:]
+                    while canvas.startswith(']'):
+                        if len(canvas_stack) > 1:
+                            canvas_stack[-2].add(canvas_stack[-1])
+                            canvas_stack.pop()
+                        canvas = canvas[1:]
+                    par_index = canvas.find('(')
+                canvas = canvas_stack[0]
+            self.add(canvas)
+    
+    def __getattr__(self, name):
+        if name in self._canvasObjects.keys():
+            # Generate a new Canvas Object
+            new = CanvasObject(name)
+            for m_name, method in self._canvasObjects[name].iteritems():
+                setattr(new, m_name, MethodType(method, new, new.__class__))
+            return new
+        else:
+            # default
+            raise AttributeError('"' + str(name) + '" is not a valid CanvasObject!')
+    
+    def __repr__(self):
+        '''Returns a representation of this CanvasObject and of all it's
+        children that the java side can interpret and form the widgets
+        view from.
+        '''
+        if type(self._repr) == str:
+            return self._repr + '(' + (self._args if type(self._args) == str else '') + ')' + (str(self.children) if len(self.children) > 0 else '')
+        if len(self.children) == 1:
+            # This CanvasObject must be a pure canvas
+            return str(self.children[0])
+        return ''
+    
+    def __call__(self, **kwargs):
+        '''This is used to initialize a CanvasObject arguments
+        all at once.
+        '''
+        for key, value in kwargs.iteritems():
+            if key == 'on_click' and callable(value):
+                PythonWidgets.addOnClick(str(id(self)), value)
+                kwargs[key] = id(self)
+            elif callable(value):
+                kwargs[key] = value.__name__
+        self._args = urlencode(kwargs)
+        return self
+    
+    def _addOption(self, name, value):
+        '''Used to add one argument with the name 'name' and the
+        value 'value' to the stored arguments self._args.
+        '''
+        print('Adding option ' + name + ': ' + str(value))
+        print(self._args, urlencode({name: ''}))
+        index = self._args.find(urlencode({name: ''}))
+        if index != -1:
+            end = self._args.find('&', index)
+            if end == -1:
+                end = len(self._args)
+            tmp = self._args[:max(index - 1, 0)]
+            self._args = tmp + self._args[end + 1:]
+        if self._args != '':
+            self._args = self._args + '&'
+        if name == 'on_click' and callable(value):
+            PythonWidgets.addOnClick(str(id(self)), value)
+            value = id(self)
+        if callable(value):
+            value = value.__name__
+        self._args = self._args + urlencode({name: value})
+        return True
+    
+    def add(self, child, index = None):
+        '''>>> add(child[, index]) -> True or False
+        Adds the CanvasObject 'child' at the given
+        index 'index' or at the end, if no index was
+        given. Returns True on success, False on failure.
+        '''
+        if not isinstance(child, CanvasBase):
+            print('[ERROR] Could not add child (' + str(child) + ') to the canvas because it is not a canvas object!')
+            return False
+        if not self._repr and len(self.children) > 0:
+            print('[ERROR] Can not add more than one root widget to canvas (Could not add ' + str(child) + ')!')
+            return False
+        print('Adding child "' + str(child) + '" to canvas...')
+        if not child._repr:
+            print('Given child is a Canvas...')
+            while not child._repr:
+                if len(child.children) == 0:
+                    # No need to add an empty canvas
+                    print('[Debug] Given canvas is empty.')
+                    return True
+                child = child.children[0]
+        if index and type(index) != int:
+            print('[Warn ] addView was called with a non numeric index: ' + str(index))
+            return False
+        elif index:
+            print('Adding it to ' + str(index))
+            self.children.insert(index, child)
+        else:
+            print('Appending it to the end.')
+            self.children.append(child)
+        return True
+    
+    def clear(self):
+        '''>>> clear()
+        Clears all children from this CanvasObject.
+        '''
+        print('Clearing canvas...')
+        self.children = []
+    
+    def remove(self, arg):
+        '''>>> remove(index or CanvasObject) -> CanvasObject or True
+        Removes the given CanvasObject 'arg' or the CanvasObject at the
+        index 'arg' from from the children list.
+        '''
+        if type(arg) == int:
+            print('Removing child from index ' + str(arg))
+            return self.children.pop(arg)
+        else:
+            print('Removing ' + str(arg))
+            self.children.remove(arg)
+            return True
+    
+
+class CanvasObject(CanvasBase):
+    '''This class represents an object which can be added to an
+    canvas and represents a view from the view-tree of a widget.
+    '''
+    
+    def __init__(self, rep):
+        '''Initializes the CanvasObject and sets its representation 'rep',
+        which indicates what kind of CanvasObject this one is.'''
+        print('Init CanvasObject (' + str(rep) +')...')
+        super(CanvasObject, self).__init__()
+        self._repr = rep
+    
+    def setOnClickListener(self, callback):
+        '''>>> setOnClickListener(callback) -> True or False
+        Setts the callback for this CanvasObject for an
+        on_click event.'''
+        return self._addOption('on_click', callback)
+    
+
+class Canvas(CanvasBase):
+    '''A representation of the empty canvas.'''
+    
+    def __init__(self, canvas = None):
+        print('Init Canvas...')
+        super(Canvas, self).__init__(canvas)
+        self._repr = False
+    
+
+class ExternalWidget(object):
+    '''Every instance of this class represents an existing widget on
+    the android home screen.
+    '''
+    
+    widget_Id = -1
+    canvas    = None
+    _provider = None
+    
+    def __init__(self, widget_Id):
+        '''ExternalWidget(widget_Id)
+        Will initialize this proxy for the android
+        widget with the given widget id 'widget_Id'.
+        If the android widget does not exist (if
+        there is not a widget with the given id
+        on the home/lockscreen), this proxy is
+        unusable.
+        '''
+        print('Init external widget with widget_Id ' + str(widget_Id))
+        if not PythonWidgets.existWidget(self._provider, widget_Id): # See if our widget_Id is in the list
+            print('The android widget with the id ' + str(widget_Id) + ' does not exist!')
+            return
+        self.widget_Id = widget_Id
+        print('Creating own canvas...')
+        self.canvas    = Canvas()
+        print('Canvas created sucessfully.')
+    
+    def update_graphics(self):
+        '''>>> update_graphics()
+        Pushes the current canvas to the screen.
+        '''
+        if self.canvas == None:
+            print('[Warn ] Tried to update the graphics of an uninitialized widget!')
+            return
+        print('Method update_graphics of Widget ' + str(self.widget_Id) + ' is getting called.')
+        print('[[[----------- Canvas: -----------]]]\n' + str(self.canvas))
+        PythonWidgets.updateWidget(self._provider, self.widget_Id, str(self.canvas))
+        print('Method update_graphics of Widget ' + str(self.widget_Id) + ' called sucessfully.')
+    
+    def getWidgetData(self, key):
+        '''>>> getWidgetData(key) -> string or None
+        Returns the string, that was stored in the
+        key 'key' via 'storeWidgetData' or None, if
+        there is no data stored in that key.
+        '''
+        print('Calling PythonWidgets.getWidgetData...')
+        data = PythonWidgets.getWidgetData(key)
+        return data or None # Ignoring occoured errors (False --> None)
+    
+    def setWidgetData(self, key, data):
+        '''>>> setWidgetData(key, data) -> success
+        Stores 'data' in key 'key', to access it
+        later via getWidgetData. 'key' is eighter
+        the string to store or None, to remove the
+        data previously stored in the key.
+        '''
+        print('Calling PythonWidgets.storeWidgetData...')
+        return PythonWidgets.storeWidgetData(key, data)
+    
+    def setInitAction(self, new_action):
+        '''>>> setInitAction(new_action) -> success
+        Setts the action, that should be performed, if
+        an widget from the current provider is created
+        by the user.
+        '''
+        print('Calling PythonWidgets.setInitAction...')
+        return PythonWidgets.setInitAction(self._provider, new_action)
+    
+    def schedule_once(self, dtime):
+        '''>>> schedule_once(dtime) -> success
+        Schedules a one time update in 'dtime' milliseconds.
+        Warning: This overrides an other one time update,
+        if one was set previously and did not happen!
+        Warning: This will not wake up the device; if the
+        device is in standby, the update will not occur
+        untill the device wakes up again.
+        '''
+        print('Calling PythonWidgets.setSingleUpdate with dtime = ' + str(dtime) + '...')
+        return PythonWidgets.setSingleUpdate(self._provider, self.widget_Id, dtime)
+    
+    def schedule_interval(self, freq):
+        '''>>> schedule_interval(freq) -> success
+        Starts a timer with the frequency 'freq' in
+        milliseconds which updates this widget every
+        time the timer ticks. If freq is -1, the current
+        timer (if there is one) is stopped.
+        Warning: This overrides an other one time update,
+        if one was set previously and did not happen!
+        Warning: This will not wake up the device; if the
+        device is in standby, the update will not occur
+        untill the device wakes up again.
+        '''
+        print('Calling PythonWidgets.setPeriodicUpdateFreq with frequency = ' + str(freq) + '...')
+        return PythonWidgets.setPeriodicUpdateFreq(self._provider, self.widget_Id, freq)
+    
+    def getUpdateInterval(self):
+        '''>>> getUpdateInterval() -> frequency or success
+        Returns the frequency in milliseconds with which
+        this widget currently recives updates or -1, if
+        the widget does not recive any updates.
+        '''
+        print('Calling PythonWidgets.getPeriodicUpdateFreq...')
+        return PythonWidgets.getPeriodicUpdateFreq(self._provider, self.widget_Id)
+
+
+class Widget(ExternalWidget):
     '''A generic class that all Widgets must inherit from.'''
     
     ### constants ###
@@ -41,6 +440,10 @@ class Widget(object):
     Resize_Vertical     = 2
     
     Both                = 3
+    
+    OneTime_UpdateType  = 0
+    Interval_UpdateType = 1
+    Hard_UpdateType     = 2
     
     Action_StartApp     = '.StartActivity'
     # Starts the main app
@@ -331,17 +734,24 @@ class Widget(object):
     #         }
     #     ]
     
-    def __init__(self, *args, **kwargs):
-        '''This function will initialize the given widget 'widget'
-        and will set it's visual appearance. If this function
+    def __init__(self, widget_Id):
+        '''This function will set the first visual appearance for
+        the android widget with the id 'widget_Id'. If this function
         throws an error, the initialisation is considered as failed
         and the widget will not be created.
         '''
-        pass
+        super(Widget, self).__init__(widget_Id)
     
-    def updateWidget(self, *args, **kwargs):
+    def updateWidget(self, updateType = None):
         '''This function gets called every time the widget receives
-        an update.
+        an update. 'updateType' describes the type of the update.
+        If it's self.OneTime_UpdateType, then it is an update
+        scheduled with schedule_once.
+        If it's self.Interval_UpdateType, then it is an interval
+        update.
+        If it's self.Hard_UpdateType, the update was a periodic
+        update triggered trough the defined intervall at
+        self.hard_update. This update might have woke up the device.
         '''
         pass
     
@@ -350,399 +760,3 @@ class Widget(object):
         the home screen.
         '''
         pass
-
-
-def estimateSize(*args):
-    '''>>> estimateSize(num_cells) -> (dp)
-    or
-    >>> estimateSize(num_cells_x, num_cells_y) -> (dp, dp)
-    Roughly convert from numbers of grid-cells
-    on the homescreen to dp, using the
-    formula 70 * num_cells - 30 given from
-    'http://developer.android.com/guide/practices/ui_guidelines/widget_design.html#cellstable'.
-    '''
-    if len(args) == 1:
-        return 70 * args[0] - 30
-    if len(args) == 2:
-        return (70 * args[0] - 30, 70 * args[1] - 30)
-    else:
-        return -1
-    
-
-def canvas_to_xml(canvas):
-    '''>>> canvas_to_xml(canvas/canvas_str) -> xml_string
-    Converts the given Canvas or Canvas-string 'canvas'
-    in a string containing an xml representation.
-    '''
-    if type(canvas) == str:
-        canvas = Canvas(canvas)
-    alias = {
-        'image_path': 'src'
-    }
-    forbidden = [
-        'UrlImageView'
-    ]
-    print('[Debug] Converting ' + str(canvas) + ' to xml...')
-    
-    def children_to_xml(children):
-        xml = ''
-        
-        for child in children:
-            name = child._repr
-            if name in forbidden:
-                print('[ERROR]' + name + ' is not allowed in xml files!')
-                continue
-            xml += '<' + name + ' xmlns:android="http://schemas.android.com/apk/res/android"\n'
-            
-            # parameters
-            
-            size_width  = False
-            size_height = False
-            
-            for key, val in parse_qsl(child._args):
-                if key == 'on_click':
-                    print('[Warn ] "on_click" events are not supported in xml files.')
-                    continue
-                size_width  = key == 'width'  or size_width
-                size_height = key == 'height' or size_height
-                if key == 'image_path': # The image needs to be in the resource folder
-                    val = '{{% "' + val + '" %}}'
-                else:
-                    val = '"' + val + '"'
-                key = alias.get(key, key)
-                
-                xml += 'android:' + key + '=' + val + '\n'
-            if not size_width:
-                xml += 'android:layout_width="wrap_content"\n'
-            if not size_height:
-                xml += 'android:layout_height="wrap_content"\n'
-            
-            # children
-            
-            if len(child.children) != 0:
-                xml += '>\n\n'
-                xml += children_to_xml(child.children)
-                xml += '</' + name + '>\n\n'
-            else:
-                xml += '/>\n\n'
-        return xml
-    
-    
-    return children_to_xml(canvas.children)
-
-
-class CanvasBase(object):
-    '''This is the base class for every canvas Object.'''
-    
-    children = None
-    _repr = None
-    _args = None
-    
-    # All possible canvas objects
-    _canvasObjects = {
-        #-- Layouts: --#
-        'LinearLayout':       {},
-        'FrameLayout':        {},
-        'RelativeLayout':     {},
-        #'GridLayout':         {},
-        
-        #--  Views:  --#
-        'TextView':           {
-            'setText':      lambda self, text:  self._addOption('text', text),
-            'setTextColor': lambda self, color: self._addOption('text_color', color),
-        },
-        'AnalogClock':        {},
-        'Button':             {},
-        'Chronometer':        {},
-        'ImageButton':        {},
-        'ImageView':          {
-            'setImagePath': lambda self, source_path: self._addOption('image_path', source_path)
-        },
-        'ProgressBar':        {},
-        'ViewFlipper':        {},
-        'ListView':           {},
-        'GridView':           {},
-        #'StackView':          {},
-        #'AdapterViewFlipper': {},
-        'ViewStub':           {},
-        
-        'UrlImageView':       {
-            'setImageUrl': lambda self, url: self._addOption('image_url', url)
-        }
-    }
-    
-    def __init__(self, canvas = None):
-        self.children = []
-        self._args     = ''
-        if canvas:
-            print('Adding children given to __init__...')
-            if type(canvas) == str:
-                print('children given via string, decoding...')
-                canvas_stack = [Canvas()]
-                par_index = canvas.find('(')
-                while par_index != -1:
-                    print('---> Canvas: ' + canvas)
-                    view = canvas[:par_index]
-                    if not view in self._canvasObjects:
-                        print('[ERROR] Got unknown view object ' + view)
-                        canvas_stack = [Canvas()]
-                        break
-                    view = CanvasObject(view)
-                    par_end = canvas.find(')', par_index)
-                    if not par_index + 1 == par_end:
-                        # Parameter
-                        print('Parameter: ' + canvas[par_index + 1:par_end])
-                        view._args = canvas[par_index + 1:par_end]
-                    canvas = canvas[par_end + 1:]
-                    if canvas.startswith('['):
-                        canvas_stack.append(view)
-                        canvas = canvas[1:]
-                    else:
-                        canvas_stack[-1].add(view)
-                    if canvas[:2] == ', ':
-                        canvas = canvas[2:]
-                    while canvas.startswith(']'):
-                        if len(canvas_stack) > 1:
-                            canvas_stack[-2].add(canvas_stack[-1])
-                            canvas_stack.pop()
-                        canvas = canvas[1:]
-                    par_index = canvas.find('(')
-                canvas = canvas_stack[0]
-            self.add(canvas)
-    
-    def __getattr__(self, name):
-        if name in self._canvasObjects.keys():
-            # Generate a new Canvas Object
-            new = CanvasObject(name)
-            for m_name, method in self._canvasObjects[name].iteritems():
-                setattr(new, m_name, MethodType(method, new, new.__class__))
-            return new
-        else:
-            # default
-            raise AttributeError
-    
-    def __repr__(self):
-        '''Returns a representation of this CanvasObject and of all it's
-        children that the java side can interpret and form the widgets
-        view from.
-        '''
-        if type(self._repr) == str:
-            return self._repr + '(' + (self._args if type(self._args) == str else '') + ')' + (str(self.children) if len(self.children) > 0 else '')
-        if len(self.children) == 1:
-            # This CanvasObject must be a pure canvas
-            return str(self.children[0])
-        return ''
-    
-    def __call__(self, **kwargs):
-        '''This is used to initialize a CanvasObject arguments
-        all at once.
-        '''
-        for key, value in kwargs.iteritems():
-            if key == 'on_click' and callable(value):
-                PythonWidgets.addOnClick(str(id(self)), value)
-                kwargs[key] = id(self)
-            elif callable(value):
-                kwargs[key] = value.__name__
-        self._args = urlencode(kwargs)
-        return self
-    
-    def _addOption(self, name, value):
-        '''Used to add one argument with the name 'name' and the
-        value 'value' to the stored arguments self._args.
-        '''
-        print('Adding option ' + name + ': ' + str(value))
-        print(self._args, urlencode({name: ''}))
-        index = self._args.find(urlencode({name: ''}))
-        if index != -1:
-            end = self._args.find('&', index)
-            if end == -1:
-                end = len(self._args)
-            tmp = self._args[:max(index - 1, 0)]
-            self._args = tmp + self._args[end + 1:]
-        if self._args != '':
-            self._args = self._args + '&'
-        if name == 'on_click' and callable(value):
-            PythonWidgets.addOnClick(str(id(self)), value)
-            value = id(self)
-        if callable(value):
-            value = value.__name__
-        self._args = self._args + urlencode({name: value})
-        return True
-    
-    def add(self, child, index = None):
-        '''>>> add(child[, index]) -> True or False
-        Adds the CanvasObject 'child' at the given
-        index 'index' or at the end, if no index was
-        given. Returns True on success, False on failure.
-        '''
-        if not isinstance(child, CanvasBase):
-            print('[ERROR] Could not add child (' + str(child) + ') to the canvas because it is not a canvas object!')
-            return False
-        if not self._repr and len(self.children) > 0:
-            print('[ERROR] Can not add more than one root widget to canvas (Could not add ' + str(child) + ')!')
-            return False
-        print('Adding child "' + str(child) + '" to canvas...')
-        if not child._repr:
-            print('Given child is a Canvas...')
-            while not child._repr:
-                if len(child.children) == 0:
-                    # No need to add an empty canvas
-                    print('[Debug] Given canvas is empty.')
-                    return True
-                child = child.children[0]
-        if index and type(index) != int:
-            print('[Warn ] addView was called with a non numeric index: ' + str(index))
-            return False
-        elif index:
-            print('Adding it to ' + str(index))
-            self.children.insert(index, child)
-        else:
-            print('Appending it to the end.')
-            self.children.append(child)
-        return True
-    
-    def clear(self):
-        '''>>> clear()
-        Clears all children from this CanvasObject.
-        '''
-        print('Clearing canvas...')
-        self.children = []
-    
-    def remove(self, arg):
-        '''>>> remove(index or CanvasObject) -> CanvasObject or True
-        Removes the given CanvasObject 'arg' or the CanvasObject at the
-        index 'arg' from from the children list.
-        '''
-        
-        if type(arg) == int:
-            print('Removing child from index' + str(arg))
-            return self.children.pop(arg)
-        else:
-            print('Removing ' + str(arg))
-            self.children.remove(arg)
-            return True
-    
-
-class CanvasObject(CanvasBase):
-    '''This class represents an object which can be added to an
-    canvas and represents a view from the view-tree of a widget.
-    '''
-    
-    def __init__(self, rep):
-        '''Initializes the CanvasObject and sets its representation 'rep',
-        which indicates what kind of CanvasObject this one is.'''
-        print('Init CanvasObject (' + str(rep) +')...')
-        super(CanvasObject, self).__init__()
-        self._repr = rep
-    
-    def setOnClickListener(self, callback):
-        '''>>> setOnClickListener(callback) -> True or False
-        Setts the callback for this CanvasObject for an
-        on_click event.'''
-        return self._addOption('on_click', callback)
-    
-
-class Canvas(CanvasBase):
-    '''A representation of the empty canvas.'''
-    
-    def __init__(self, canvas = None):
-        print('Init Canvas...')
-        super(Canvas, self).__init__(canvas)
-        self._repr = False
-    
-
-class ExternalWidget(object):
-    '''Every instance of this class represents an existing widget on
-    the android home screen.
-    '''
-    
-    widget_Id = -1
-    canvas    = None
-    
-    def __init__(self, widget_Id):
-        print('Init external widget.')
-        self.widget_Id = widget_Id
-        print('Creating own canvas...')
-        self.canvas    = Canvas()
-        print('Canvas created sucessfully.')
-    
-    def update(self):
-        '''>>> update()
-        Pushes the current canvas to the screen.
-        '''
-        print('Method update of Widget ' + str(self.widget_Id) + ' is getting called.')
-        print('[[[----------- Canvas: -----------]]]\n' + str(self.canvas))
-        PythonWidgets.updateWidget(self.widget_Id, str(self.canvas))
-        print('Method update of Widget ' + str(self.widget_Id) + ' called sucessfully.')
-    
-
-def getWidget(widget_ID):
-    '''>>> getWidget(widget_ID) -> widget or None
-    This function returns an instance that represents
-    the widget with the id 'widget_ID' or None,
-    if no widget with the given id exists.
-    '''
-    print('getWidget is called, widget_ID is ' + str(widget_ID))
-    if PythonWidgets.existWidget(widget_ID): # See if our widget_Id is in the list
-        print('Widget Id exists, creating ext widget...')
-        ExtWidget = ExternalWidget(widget_ID)
-        print('Done creating ext widget, returning it')
-        return ExtWidget
-    print('Widget Id does not exist!')
-    return None
-
-def getDefaultError():
-    '''>>> getDefaultError() -> canvas or None
-    Returns the default view that is shown, if
-    the initialisation of a widget failed; if
-    the initWidget function did not return True
-    or if it throws an error.
-    '''
-    err_view = PythonWidgets.getDefaultErrorView()
-    if err_view == None:
-        return None
-    else:
-        return Canvas(err_view)
-
-def setDefaultError(canvas = None):
-    '''>>> setDefaultError([canvas]) -> success
-    Sets the default view that is shown, if
-    the initialisation of a widget failed; if
-    the initWidget function did not return True
-    or if it throws an error. If no canvas is
-    given, a predefined default canvas is used.
-    '''
-    if canvas and (not isinstance(canvas, CanvasBase)):
-        print('[ERROR] Could not set the default error view because the given argument (' + str(canvas) + ' is not a Canvas!')
-        return False
-    print('Setting the default error view to ' + str(canvas))
-    return PythonWidgets.setDefaultErrorView(str(canvas) if canvas else canvas)    
-
-def getWidgetData(key):
-    '''>>> getWidgetData(key) -> string or None
-    Returns the string, that was stored in the
-    key 'key' via 'storeWidgetData' or None, if
-    there is no data stored in that key.
-    '''
-    print('Calling PythonWidgets.getWidgetData...')
-    data = PythonWidgets.getWidgetData(key)
-    return data or None # Ignoring occoured errors (False --> None)
-
-def setWidgetData(key, data):
-    '''>>> setWidgetData(key, data) -> success
-    Stores 'data' in key 'key', to access it
-    later via getWidgetData. 'key' is eighter
-    the string to store or None, to remove the
-    data previously stored in the key.
-    '''
-    print('Calling PythonWidgets.storeWidgetData...')
-    return PythonWidgets.storeWidgetData(key, data)
-
-def setInitAction(new_action):
-    '''>>> getWidgetData() -> success
-    Setts the action, that shoul be performed, if
-    an widget from the current provider is created
-    by the user.
-    '''
-    print('Calling PythonWidgets.setInitAction...')
-    return PythonWidgets.setInitAction(new_action)
