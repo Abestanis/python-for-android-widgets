@@ -88,9 +88,16 @@ If you want to provide widgets, you need a 'WidgetProvider.py' file in your prog
           '''
           pass
       
-      def updateWidget(self):
+      def updateWidget(self, updateType = None):
           '''This function gets called every time the widget receives
-          an update.
+          an update. 'updateType' describes the type of the update.
+          If it's self.OneTime_UpdateType, then it is an update
+          scheduled with schedule_once.
+          If it's self.Interval_UpdateType, then it is an interval
+          update.
+          If it's self.Hard_UpdateType, the update was a periodic
+          update triggered trough the defined intervall at
+          self.hard_update. This update might have woke up the device.
           '''
           pass
       
@@ -108,7 +115,6 @@ You can also set certain properties of your widget by overwriting the correspond
 .. code-block:: python
   
   class MyWidget2(Widget):
-      
       widget_name = 'HelloWorldWidget'
 
 Finally you need to set the '--widget' flag when building your app with build.py in dist/default.
@@ -119,8 +125,8 @@ Just add a CanvasObject (aka. view) to the canvas and push the change to the scr
 
 .. code-block:: python
 
-  widget.canvas.add(view)
-  widget.update() # Don't forget this!
+  self.canvas.add(view)
+  self.update_graphics() # Don't forget this!
 
 Due to android `limitations`_, only a few view types are allowed on the canvas:
 
@@ -148,13 +154,13 @@ You can get a new CanvasObject from every other CanvasObject or a canvas itself:
 
 .. code-block:: python
 
-  textview1 = widget.canvas.TextView(text = 'Hello world!')
+  textview1 = self.canvas.TextView(text = 'Hello world!')
   textview2 = textview1.TextView(text = 'How are you?')
 
 
 For more information about the canvas system look at `AndroidWidgets.py`_.
 
 
-.. _here: https://github.com/Abestanis/python-for-android-widgets/blob/master/This%20goes%20into%20the%20program%20folder/WidgetProvider.py
+.. _here: https://github.com/Abestanis/python-for-android-widgets/blob/master/This%20goes%20into%20the%20program%20folder/AndroidWidgets.py#LC431
 .. _limitations: http://developer.android.com/guide/topics/appwidgets/index.html#CreatingLayout
-.. _AndroidWidgets.py: https://github.com/Abestanis/python-for-android-widgets/blob/master/This%20goes%20into%20the%20program%20folder/AndroidWidgets.py
+.. _AndroidWidgets.py: https://github.com/Abestanis/python-for-android-widgets/blob/master/This%20goes%20into%20the%20program%20folder/AndroidWidgets.py#LC111
