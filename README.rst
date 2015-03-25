@@ -109,7 +109,7 @@ If you want to provide widgets, you need a 'WidgetProvider.py' file in your prog
 
 An example 'WidgetProvider.py' is provided `here`_.
 
-For each widget you want to provide, you need a class which is a subclass of the Widget class at `AndroidWidgets.py`_.
+For each widget you want to provide, you need a class which is a subclass of the `Widget class`_ at AndroidWidgets.py.
 You can also set certain properties of your widget by overwriting the corresponding attribute in your class:
 
 .. code-block:: python
@@ -161,6 +161,7 @@ You can get a new CanvasObject from every other CanvasObject or a canvas itself:
 For more information about the canvas system look at `AndroidWidgets.py`_.
 
 
-.. _here: https://github.com/Abestanis/python-for-android-widgets/blob/master/This%20goes%20into%20the%20program%20folder/AndroidWidgets.py#LC431
+.. _here: https://github.com/Abestanis/python-for-android-widgets/blob/master/This%20goes%20into%20the%20program%20folder/WidgetProvider.py#LC1
+.. _Widget class: https://github.com/Abestanis/python-for-android-widgets/blob/master/This%20goes%20into%20the%20program%20folder/AndroidWidgets.py#LC431
 .. _limitations: http://developer.android.com/guide/topics/appwidgets/index.html#CreatingLayout
 .. _AndroidWidgets.py: https://github.com/Abestanis/python-for-android-widgets/blob/master/This%20goes%20into%20the%20program%20folder/AndroidWidgets.py#LC111
