@@ -74,7 +74,7 @@ import org.renpy.android.PythonWidgetProvider;
  */
 
 
-public class %(name)sProvider extends PythonWidgetProvider {
+public class %(java_name)sProvider extends PythonWidgetProvider {
     
     private final String  WIDGET_NAME  = "%(name)s";
     private final String  WIDGET_CLASS = "%(cls)s";
@@ -218,6 +218,7 @@ def gather_widgets():
         widgets.append({
             'cls_name':      widget.__name__,
             'name':          widget.widget_name or widget.__name__,
+            'java_name':     (widget.widget_name or widget.__name__).replace(' ', ''),
             'dflt_size':     widget.widget_dflt_size,
             'min_size':      widget.widget_min_size,
             'preview_image': widget.preview_image,
@@ -232,6 +233,7 @@ def gather_widgets():
             widgets.append({
                 'cls_name':      widget.__name__,
                 'name':          data['widget_name']         if data.has_key('widget_name')         else (widget.widget_name or widget.__name__) + str(id(data)), # We need another name here
+                'java_name':     ((widget.widget_name or widget.__name__) + str(id(data))).replace(' ', ''),
                 'dflt_size':     data['widget_dflt_size']    if data.has_key('widget_dflt_size')    else widget.widget_dflt_size,
                 'min_size':      data['widget_min_size']     if data.has_key('widget_min_size')     else widget.widget_min_size,
                 'preview_image': data['preview_image']       if data.has_key('preview_image')       else widget.preview_image,
@@ -342,13 +344,13 @@ def build_widget_recources(widgets, src_path, layout_path):
     # java provider
     
     for widget in widgets:
-        provider = widget['name'] + 'Provider'
+        provider = widget['java_name'] + 'Provider'
         print('[Info ] Building java widget provider for ' + widget['name'] + '...')
         provider = findfreeName(src_path, provider, '.java')
         widget['provider_name'] = provider
         print('[Info ] Writing to "' + src_path + sep + provider + '.java"...')
         f = open(src_path + sep + provider + '.java', 'w')
-        f.write(java_provider_tmpl % {'name': widget['name'], 'cls': widget['cls_name'], 'id': str(id(widget))})
+        f.write(java_provider_tmpl % {'java_name': widget['java_name'], 'name': widget['name'], 'cls': widget['cls_name'], 'id': str(id(widget))})
         f.close()
     
     # moving preview image
@@ -364,7 +366,7 @@ def build_widget_recources(widgets, src_path, layout_path):
         # Homescreen layout
         for typ in ['', 'lock_']:
             if widget[typ + 'layout']:
-                layout = widget['name'].lower() + '_' + typ + 'layout'
+                layout = widget['java_name'].lower() + '_' + typ + 'layout'
                 layout_str = widget[typ + 'layout']
                 print('[Info ] Creating initial ' + ('home' if typ == '' else 'lock') + 'screen layout for ' + widget['name'] + ' at "' + layout_path + sep + layout + '.xml"...')
                 res = search('android:src={{% ".*" %}}\n', layout_str)
@@ -388,7 +390,7 @@ def build_widget_recources(widgets, src_path, layout_path):
     # widgetinfo xml
     
     for widget in widgets:
-        info = widget['name'].lower() + '_info'
+        info = widget['java_name'].lower() + '_info'
         print('[Info ] Building AppWidgetProviderInfo xml (' + provider + ') for ' + widget['name'] + '...')
         info = findfreeName(layout_path, info, '.xml')
         widget['info_name'] = info

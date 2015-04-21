@@ -22,7 +22,7 @@
                >
 
   {% for widget in widgets %}
-  <receiver android:name="{{ "org.renpy.appwidgets." ~ widget.name ~ "Provider" }}"
+  <receiver android:name="{{ "org.renpy.appwidgets." ~ widget.java_name ~ "Provider" }}"
 	    android:label="{{ widget.name }}">
     <intent-filter>
        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />

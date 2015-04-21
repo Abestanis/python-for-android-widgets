@@ -13,7 +13,7 @@ from urllib         import unquote_plus
 
 class HelloWorldWidget(Widget):
     '''This class defines two Widgets which will display
-    'Hello World" and launch the main App, if the user
+    'Hello World' and launch the main App, if the user
     clicks on them. This widget has no configuration.
     '''
     

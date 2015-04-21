@@ -16,9 +16,7 @@
     {% if widget.category in ["home_screen", "home_screen|keyguard"] -%}
     android:initialLayout="{{ "@layout/" ~ widget.layout }}"
     {%- endif %}
-    {% if false -%}
     android:configure="org.renpy.android.PythonWidgetConfigurationActivity"
-    {%- endif %}
     {% if android_api >= 17 -%}
     android:widgetCategory="{{ widget.category }}"
     {% if widget.category in ["keyguard", "home_screen|keyguard"] -%}

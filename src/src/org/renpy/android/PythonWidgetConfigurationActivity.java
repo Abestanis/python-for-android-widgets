@@ -7,7 +7,6 @@ package org.renpy.android;
  * Copyright 2014 Sebastian Scholz <abestanis.gc@gmail.com> 
  */
 
-import java.util.Calendar;
 import android.app.Activity;
 import android.appwidget.AppWidgetManager;
 import android.content.Intent;
@@ -66,7 +65,7 @@ public class PythonWidgetConfigurationActivity extends Activity {
         }
         providerId = providerInstance.getProviderId();
 		
-		Log.i(TAG, "Configure Widget " + appWidgetId + " from widgetprovider " + providerName + "(class = " + className + ", id = " + providerId + ").");
+		Log.i(TAG, "Configure Widget " + appWidgetId + " from widgetProvider " + providerName + "(class = " + className + ", id = " + providerId + ").");
 		
 		// Provider might or might not be already initialized at this point
 		// This ensures that the Provider is loaded:
@@ -80,7 +79,7 @@ public class PythonWidgetConfigurationActivity extends Activity {
 			providerInstance.onReceive(getBaseContext(), enableIntent);
 			
 			if (!PythonWidgetProvider._initActions.containsKey(providerId) || PythonWidgetProvider._initActions.get(providerId) == null) {
-				Log.e(TAG, "Widgetprovider " + providerName + " doesn't declare an initialistation action!");
+				Log.e(TAG, "WidgetProvider " + providerName + " doesn't declare an initialisation action!");
 				finish();
 				return;
 			}
@@ -101,9 +100,9 @@ public class PythonWidgetConfigurationActivity extends Activity {
 			// TODO: Work on a solution.
 			if (action.startsWith("argv:")) {
 				// Extract command line arguments
-				startMainApp(new String[] {"--show_config", String.valueOf(appWidgetId), providerInstance.getWidgetClass(), providerName, action.substring(5)});
+				PythonWidgetProvider.startMainApp(getBaseContext(), new String[] {"--show_config", String.valueOf(appWidgetId), providerInstance.getWidgetClass(), providerName, action.substring(5)});
 			} else {
-				startMainApp(new String[] {"--show_config", String.valueOf(appWidgetId), providerInstance.getWidgetClass(), providerName});
+                PythonWidgetProvider.startMainApp(getBaseContext(), new String[] {"--show_config", String.valueOf(appWidgetId), providerInstance.getWidgetClass(), providerName});
 			}
 		} else {
 			// Display simple configuration options
@@ -122,7 +121,7 @@ public class PythonWidgetConfigurationActivity extends Activity {
 				}
 				@Override
 				public void onCancel() {
-					finish();
+				    finish();
 				}
 			});
 		}
@@ -161,19 +160,18 @@ public class PythonWidgetConfigurationActivity extends Activity {
     	Log.i(TAG, "Initializing widget...");
     	Intent initIntent = new Intent();
 		initIntent.setAction(PythonWidgetProvider.WIDGET_INIT_UPDATE);
-		initIntent.putExtra("WidgetId", appWidgetId);
+		initIntent.putExtra("widgetId", appWidgetId);
 		
 		providerInstance.onReceive(getBaseContext(), initIntent);
 		
 		if (PythonWidgetProvider.data.get(providerId).contains(appWidgetId)) {
-			Log.i(TAG, "Widget init was successfull!");
+			Log.i(TAG, "Widget init was successful!");
 			setResult(RESULT_OK);
 		} else {
 			Log.i(TAG, "Removing widget from homescreen!");
 			setResult(RESULT_CANCELED);
 		}
 		finish();
-		return;
     }
     
     public void onConfigResult(boolean resultOK) {
@@ -184,15 +182,5 @@ public class PythonWidgetConfigurationActivity extends Activity {
         	setResult(RESULT_CANCELED);
     		finish();
         }
-        return;
-	}
-    
-    private void startMainApp(String[] argv) {
-    	id = Calendar.getInstance().getTimeInMillis();
-    	Intent configIntent = new Intent(getBaseContext(), PythonActivity.class);
-		configIntent.putExtra("argv", argv);
-		configIntent.putExtra("ConfigActivityId", id);
-		configIntent.setFlags(Intent.FLAG_ACTIVITY_PREVIOUS_IS_TOP);
-		startActivity(configIntent);
 	}
 }

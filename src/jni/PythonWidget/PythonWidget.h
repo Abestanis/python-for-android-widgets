@@ -22,67 +22,67 @@ extern "C" {
 #endif
 /*
  * Class:     org_renpy_android_PythonWidgetProvider
- * Method:    nativeinit
+ * Method:    nativeInit
  * Signature: (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
  */
-JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativeinit
+JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativeInit
   (JNIEnv *, jobject, jstring, jstring, jstring);
 
 /*
  * Class:     org_renpy_android_PythonWidgetProvider
- * Method:    nativeend
+ * Method:    nativeEnd
  * Signature: ()V
  */
-JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativeend
+JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativeEnd
   (JNIEnv *, jobject);
 
 /*
  * Class:     org_renpy_android_PythonWidgetProvider
- * Method:    nativeinitProvider
+ * Method:    nativeInitProvider
  * Signature: (ILjava/lang/String;)
  */
-JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativeinitProvider
+JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativeInitProvider
   (JNIEnv *, jobject, jint, jstring);
 
 /*
  * Class:     org_renpy_android_PythonWidgetProvider
- * Method:    nativeendProvider
+ * Method:    nativeEndProvider
  * Signature: (ILjava/lang/String;)V
  */
-JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativeendProvider
+JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativeEndProvider
   (JNIEnv *, jobject, jint, jstring);
 
 /*
  * Class:     org_renpy_android_PythonWidgetProvider
- * Method:    nativeinitWidget
+ * Method:    nativeInitWidget
  * Signature: (ILjava/lang/String;I)Z
  */
-JNIEXPORT jboolean JNICALL Java_org_renpy_android_PythonWidgetProvider_nativeinitWidget
+JNIEXPORT jboolean JNICALL Java_org_renpy_android_PythonWidgetProvider_nativeInitWidget
   (JNIEnv *, jobject, jint, jstring, jint);
 
 /*
  * Class:     org_renpy_android_PythonWidgetProvider
- * Method:    nativeupdateWidget
+ * Method:    nativeUpdateWidget
  * Signature: (ILjava/lang/String;II)V
  */
-JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativeupdateWidget
+JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativeUpdateWidget
   (JNIEnv *, jobject, jint, jstring, jint, jint);
 
 /*
  * Class:     org_renpy_android_PythonWidgetProvider
- * Method:    nativedestroyWidget
+ * Method:    nativeDestroyWidget
  * Signature: (ILjava/lang/String;I)V
  */
-JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativedestroyWidget
+JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativeDestroyWidget
   (JNIEnv *, jobject, jint, jstring, jint);
 
 /*
  * Class:     org_renpy_android_PythonWidgetProvider
  * Method:    nativePythonCallback
- * Signature: (ILjava/lang/String;ILjava/lang/String;)V
+ * Signature: (ILjava/lang/String;ILjava/lang/String;I)V
  */
 JNIEXPORT void JNICALL Java_org_renpy_android_PythonWidgetProvider_nativePythonCallback
-  (JNIEnv *, jobject, jint, jstring, jint, jstring);
+  (JNIEnv *, jobject, jint, jstring, jint, jstring, jint);
 
 #ifdef __cplusplus
 }
@@ -113,6 +113,7 @@ static PyObject *PythonWidgets_setInitAction(        PyObject *self, PyObject *a
 static PyObject *PythonWidgets_setSingleUpdate(      PyObject *self, PyObject *args);
 static PyObject *PythonWidgets_setPeriodicUpdateFreq(PyObject *self, PyObject *args);
 static PyObject *PythonWidgets_getPeriodicUpdateFreq(PyObject *self, PyObject *args);
+static PyObject *PythonWidgets_startMainApp(         PyObject *self, PyObject *args);
 
 PyMODINIT_FUNC initPythonWidgets(void);
 

@@ -112,41 +112,123 @@ class CanvasBase(object):
     '''This is the base class for every canvas Object.'''
     
     children = None
-    _repr = None
-    _args = None
+    _repr    = None
+    _args    = None
     
     # All possible canvas objects
-    _canvasObjects = { # TODO: Finally implement the rest!!!
+    _canvasObjects = {
         #-- Layouts: --#
-        'LinearLayout':       {},
-        'FrameLayout':        {},
-        'RelativeLayout':     {},
-        #'GridLayout':         {},
+        'LinearLayout':       {
+            'setOrientation':                lambda self, orientation:     self._addOption('orientation', orientation),
+            'manageChildren':                lambda self, manage_children: self._addOption('manage_children', manage_children),
+            # All children will have the same size
+            'setGravity':                    lambda self, gravity:         self._addOption('gravity', gravity),
+            # 'gravity' must be a string of this list (http://developer.android.com/reference/android/view/Gravity.html#constants)
+            'setBaselineAligned':            lambda self, aligned:         self._addOption('baseline_aligned', aligned),
+            'setBaselineAlignedChild':       lambda self, childIndex:      self._addOption('baseline_aligned_child', childIndex),
+            # See: http://developer.android.com/reference/android/widget/LinearLayout.html#setBaselineAlignedChildIndex(int)
+            'enableMeasureWithLargestChild': lambda self, enable:          self._addOption('measure_with_largest_child', enable),
+            # See: http://developer.android.com/reference/android/widget/LinearLayout.html#setMeasureWithLargestChildEnabled(boolean)
+            # Only usefull when manage_children is set to True.
+            'setVirtualChildCount':          lambda self, count:           self._addOption('virtual_children', count),
+            # Only usefull when manage_children is set to True.
+            # If manage_children is set to True and this layout would have 3 children, each child would take up 1/3 of the layouts space.
+            # If virtual_children is to 5, the 3 children woult each take up 1/5 of the space and the rest would be empty.
+        },
+        'FrameLayout':        {
+            'manageChildren':     lambda self, manage_children: self._addOption('manage_children', manage_children),
+            # All children will have the same size
+            'preserveLayoutSize': lambda self, preserveSpace:   self._addOption('preserve_layout_size', preserveSpace),
+            # If set to True, the necessary space for children with visibility set to GONE is still provided.
+            # Info: This does not prevent size changes if the size of a child changes.
+        },
+        'RelativeLayout':     {
+            'manageChildren': lambda self, manage_children: self._addOption('manage_children', manage_children),
+            # All children will have the same size
+            'setGravity':     lambda self, gravity:         self._addOption('gravity', gravity),
+            # 'gravity' must be a string of this list (http://developer.android.com/reference/android/view/Gravity.html#constants)
+        },
+        'GridLayout':         { # Only avaliable at android API level 14 and higher
+            'manageChildren': lambda self, manage_children: self._addOption('manage_children', manage_children),
+            # All children will have the same size
+        },
         
         #--  Views:  --#
         'TextView':           {
-            'setText':      lambda self, text:  self._addOption('text', text),
-            'setTextColor': lambda self, color: self._addOption('text_color', color),
+            'setText':      lambda self, text:    self._addOption('text', text),
+            'setTextColor': lambda self, color:   self._addOption('text_color', color),
+            'setTextSize':  lambda self, size:    self._addOption('text_size', size), # Requires android API level 16
+            'setGravity':   lambda self, gravity: self._addOption('gravity', gravity),
+            # 'gravity' must be a string of this list (http://developer.android.com/reference/android/view/Gravity.html#constants)
         },
         'AnalogClock':        {},
-        'Button':             {},
-        'Chronometer':        {},
-        'ImageButton':        {},
-        'ImageView':          {
-            'setImagePath': lambda self, source_path: self._addOption('image_path', source_path)
+        'Button':             {
+            'setText':      lambda self, text:    self._addOption('text', text),
+            'setTextColor': lambda self, color:   self._addOption('text_color', color),
+            'setTextSize':  lambda self, size:    self._addOption('text_size', size), # Requires android API level 16
+            'setGravity':   lambda self, gravity: self._addOption('gravity', gravity),
+            # 'gravity' must be a string of this list (http://developer.android.com/reference/android/view/Gravity.html#constants)
         },
-        'ProgressBar':        {},
-        'ViewFlipper':        {},
-        'ListView':           {},
-        'GridView':           {},
-        #'StackView':          {},
-        #'AdapterViewFlipper': {},
+        'Chronometer':        {
+            'setStartTime': lambda self, time:       self._addOption('chronometer_start', time),
+            # 'chronometer_start' is in milliseconds.
+            'setFormat':    lambda self, format_str: self._addOption('format', format_str),
+            # Info: For format possibilities see 'http://docs.oracle.com/javase/6/docs/api/java/text/SimpleDateFormat.html'
+            'start':        lambda self:             self._addOption('started', True),
+            'pause':        lambda self:             self._addOption('started', False),
+        },
+        'ImageButton':        {
+            'setImagePath': lambda self, source_path:   self._addOption('image_path', source_path),
+            'allowStretch': lambda self, allow_stretch: self._addOption('allow_stretch', allow_stretch),
+            'setMaxWidth':  lambda self, max_width:     self._addOption('max_width', max_width),
+            'setMaxHeight': lambda self, max_height:    self._addOption('max_height', max_height),
+            'setAlpha':     lambda self, alpha:         self._addOption('alpha', alpha),
+            'setTint':      lambda self, color:         self._addOption('tint',  color),
+        },
+        'ImageView':          {
+            'setImagePath': lambda self, source_path:   self._addOption('image_path', source_path),
+            'allowStretch': lambda self, allow_stretch: self._addOption('allow_stretch', allow_stretch),
+            'setMaxWidth':  lambda self, max_width:     self._addOption('max_width', max_width),
+            'setMaxHeight': lambda self, max_height:    self._addOption('max_height', max_height),
+            'setAlpha':     lambda self, alpha:         self._addOption('alpha', alpha),
+            'setTint':      lambda self, color:         self._addOption('tint',  color),
+        },
+        'ProgressBar':        {
+            'setIndeterminate':     lambda self, indeterminate: self._addOption('indeterminate', indeterminate),
+            'setMax':               lambda self, max_progress:  self._addOption('max_progress', max_progress),
+            'setProgress':          lambda self, progress:      self._addOption('progress', progress),
+            'setSecondaryProgress': lambda self, progress:      self._addOption('secondary_progress', progress),
+        },
+        'ViewFlipper':        {
+            'setFlipInterval':      lambda self, interval:      self._addOption('flip_interval', interval),
+            # 'interval' is in milliseconds.
+        },
+        'ListView':           {
+            'setOnChildClickListener': lambda self, callback:   self._addOption('on_child_click', callback), # Requires android API level 11
+            'scrollTo':                lambda self, childIndex: self._addOption('scroll_pos',   childIndex), # Requires android API level 11
+        },
+        'GridView':           {
+            'setOnChildClickListener': lambda self, callback:   self._addOption('on_child_click', callback), # Requires android API level 11
+            'scrollTo':                lambda self, childIndex: self._addOption('scroll_pos',   childIndex), # Requires android API level 11
+        },
+        'StackView':          { # Only avaliable at android API level 11 and higher
+            'setOnChildClickListener': lambda self, callback:   self._addOption('on_child_click', callback), # Requires android API level 11
+            'setActiveChild':          lambda self, childIndex: self._addOption('active_child', childIndex), # Requires android API level 12
+            'showNext':                lambda self:             self._addOption('show_next',          True), # Requires android API level 11
+            'showPrevious':            lambda self:             self._addOption('show_prev',          True), # Requires android API level 11
+        },
+        'AdapterViewFlipper': { # Only avaliable at android API level 11 and higher
+            'setOnChildClickListener': lambda self, callback:   self._addOption('on_child_click', callback), # Requires android API level 11
+            'setActiveChild':          lambda self, childIndex: self._addOption('active_child', childIndex), # Requires android API level 12
+            'showNext':                lambda self:             self._addOption('show_next',          True), # Requires android API level 11
+            'showPrevious':            lambda self:             self._addOption('show_prev',          True), # Requires android API level 11
+        },
         'ViewStub':           {},
     }
     
     def __init__(self, canvas = None):
         self.children = []
-        self._args     = ''
+        self._args    = ''
         if canvas:
             print('Adding children given to __init__...')
             if type(canvas) == str:
@@ -234,9 +316,9 @@ class CanvasBase(object):
             self._args = tmp + self._args[end + 1:]
         if self._args != '':
             self._args = self._args + '&'
-        if name == 'on_click' and callable(value):
-            PythonWidgets.addOnClick(str(id(self)), value)
-            value = id(self)
+        if (name == 'on_click' or name == 'on_child_click') and callable(value):
+            PythonWidgets.addOnClick(str(id(value)), value)
+            value = id(value)
         if callable(value):
             value = value.__name__
         self._args = self._args + urlencode({name: value})
@@ -290,9 +372,13 @@ class CanvasBase(object):
             print('Removing child from index ' + str(arg))
             return self.children.pop(arg)
         else:
-            print('Removing ' + str(arg))
-            self.children.remove(arg)
-            return True
+            if arg in self.children:
+                print('Removing ' + str(arg))
+                self.children.remove(arg)
+                return True
+            else:
+                print('Could not remove ' + str(arg) + ': Not in child list!')
+                return False
     
 
 class CanvasObject(CanvasBase):
@@ -307,11 +393,46 @@ class CanvasObject(CanvasBase):
         super(CanvasObject, self).__init__()
         self._repr = rep
     
+    # Methods for all CanvasObjects #
+    
     def setOnClickListener(self, callback):
         '''>>> setOnClickListener(callback) -> True or False
-        Setts the callback for this CanvasObject for an
-        on_click event.'''
+        Sets the callback for this CanvasObject for an
+        on_click event.
+        '''
         return self._addOption('on_click', callback)
+    
+    def setVisibility(self, visibility):
+        '''>>> setVisibility(visibility) -> True or False
+        Sets the visibility for this CanvasObject.
+        'visibility' is a sting and must be one of the following:
+        - "VISIBLE":   The CanvasObject is visible.
+        - "INVISIBLE": The CanvasObject is invisible, but it still
+                       takes up space for layout purposes.
+        - "GONE":      The CanvasObject is invisible and it doesn't
+                       take any space for layout purposes.
+        '''
+        return self._addOption('visibility', visibility)
+    
+    def setPadding(self, *args):
+        '''>>> setPadding(padding) or
+        >>> setPadding(horizontal, vertical) or
+        >>> setPadding(left, top, right, bottom) -> True or False
+        Sets the padding for this CanvasObject.
+        
+        Warning: Requires android API level 16!
+        '''
+        return self._addOption('padding', list(args))
+    
+    def setContentDescription(self, description):
+        '''>>> setContentDescription(description) -> True or False
+        Sets the content description for this CanvasObject.
+        It briefly describes the view and is primarily used
+        for accessibility support.
+        
+        Warning: Requires android API level 15!
+        '''
+        return self._addOption('padding', list(args))
     
 
 class Canvas(CanvasBase):
@@ -384,24 +505,24 @@ class ExternalWidget(object):
     
     def setInitAction(self, new_action):
         '''>>> setInitAction(new_action) -> success
-        Setts the action, that should be performed, if
+        Sets the action, that should be performed, if
         an widget from the current provider is created
         by the user.
         '''
         print('Calling PythonWidgets.setInitAction...')
         return PythonWidgets.setInitAction(self._provider, new_action)
     
-    def schedule_once(self, dtime):
-        '''>>> schedule_once(dtime) -> success
-        Schedules a one time update in 'dtime' milliseconds.
+    def schedule_once(self, timeDiff):
+        '''>>> schedule_once(timeDiff) -> success
+        Schedules a one time update in 'timeDiff' milliseconds.
         Warning: This overrides an other one time update,
         if one was set previously and did not happen!
         Warning: This will not wake up the device; if the
         device is in standby, the update will not occur
         untill the device wakes up again.
         '''
-        print('Calling PythonWidgets.setSingleUpdate with dtime = ' + str(dtime) + '...')
-        return PythonWidgets.setSingleUpdate(self._provider, self.widget_Id, dtime)
+        print('Calling PythonWidgets.setSingleUpdate with timeDiff = ' + str(timeDiff) + '...')
+        return PythonWidgets.setSingleUpdate(self._provider, self.widget_Id, timeDiff)
     
     def schedule_interval(self, freq):
         '''>>> schedule_interval(freq) -> success
@@ -426,6 +547,40 @@ class ExternalWidget(object):
         '''
         print('Calling PythonWidgets.getPeriodicUpdateFreq...')
         return PythonWidgets.getPeriodicUpdateFreq(self._provider, self.widget_Id)
+    
+    def startApp(self, args = None):
+        '''>>> startApp(args) -> success
+        Starts the main app associated
+        with this widget, passing 'args'
+        as command line arguments.
+        Returns True on success and
+        False otherwise.
+        '''
+        return PythonWidgets.startMainApp(self._provider, args)
+    
+    def showConfig(self, args = None, widgetInfo = True):
+        '''>>> startApp(args) -> success
+        Starts the main app associated
+        with this widget with
+        "--showConfig" as the first
+        argument. If 'widgetInfo'
+        is set to True, the widgets
+        Id, it's class name and it's
+        widget name will get passed
+        in as the second, third and
+        fourth argument. Everything
+        in 'args' will then be added
+        to the command line arguments
+        list. Returns True on success
+        and False otherwise.
+        '''
+        args = args if type(args) == list else [args] if args != None else []
+        args.insert(0, '--show_config')
+        if widgetInfo:
+            args.insert(1, self.widget_Id)
+            args.insert(2, self.__class__.__name__)
+            args.insert(3, self.widget_name if hasattr(self, 'widget_name') and self.widget_name != None else args[2])
+        return self.startApp(args)
 
 
 class Widget(ExternalWidget):
@@ -445,8 +600,15 @@ class Widget(ExternalWidget):
     Interval_UpdateType = 1
     Hard_UpdateType     = 2
     
-    Action_StartApp     = '.StartActivity'
-    # Starts the main app
+    def Action_StartApp(self, args = []):
+        return '.StartActivity(' + urlencode(dict(enumerate(args))) + ')'
+    def Action_ShowConfig(self, args = []):
+        return '.StartActivity(' + urlencode(dict(enumerate([
+            '--show_config',
+            self.widget_Id,
+            self.__class__.__name__,
+            self.widget_name if hasattr(self, 'widget_name') and self.widget_name != None else self.__class__.__name__
+            ] + args))) + ')'
     
     ### defaults ###
     
@@ -608,11 +770,11 @@ class Widget(ExternalWidget):
     #                       Hints wont get displayed, if there is no description.
     #                       The hints text size is half the normal text size by default. If you don't want this, just set 'hint_text_size' to 'default'.
     #
-    #           {'type': 'separator'},
+    #           {'type': 'Separator'},
     #           # Draws a separator line between the previous element and the next.
     #           # Will not deposit any value in the result!
     #
-    #           {'type': 'text', 'text': String, 'text_size': Integer, 'text_color': [r,g,b,a]},
+    #           {'type': 'Text', 'text': String, 'text_size': Integer, 'text_color': [r,g,b,a]},
     #           # Displays text.
     #           # Arguments:
     #           #   text:       The text to display
@@ -620,7 +782,7 @@ class Widget(ExternalWidget):
     #           #   text_color: The text color, a is optional, optional
     #           # Will not deposit any value in the result!
     #
-    #           {'type': 'togglebutton', 'text_on': String, 'text_off': String, 'state': 1/'on'/0/'off'},
+    #           {'type': 'ToggleButton', 'text_on': String, 'text_off': String, 'state': 1/'on'/0/'off'},
     #           # A button with two states, on and off
     #           # Arguments:
     #           #   text_on:  The text that should be displayed, if the buttons state is on,  optional
@@ -628,13 +790,13 @@ class Widget(ExternalWidget):
     #           #   state:    The initial state of the togglebutton, may be either 'on', 1, 'off' or 0, optional, defaults to 1
     #           # Will deposit its state as one of the strings 'true' or 'false'
     #
-    #           {'type': 'switch'},
+    #           {'type': 'Switch'},
     #           # A switch with two states, on and off, Warning: Switches require android version 4.0 (ICE_CREAM_SANDWICH) or higher, a togglebutton is used instead
     #           # Arguments:
     #           #   see togglebutton
     #           # Will deposit its state the same as a togglebutton.
     #
-    #           {'type': 'seek_bar', 'default': Integer, 'min': Integer, 'max': Integer},
+    #           {'type': 'SeekBar', 'default': Integer, 'min': Integer, 'max': Integer},
     #           # A horizontal seekbar.
     #           # Arguments:
     #           #   default: The initial value of the seekbar, optional, defaults to 0
@@ -642,7 +804,7 @@ class Widget(ExternalWidget):
     #           #   max:     The maximal allowed value,        optional, defaults to 100
     #           # Will deposit its value as a number.
     #
-    #           {'type': 'text_input', 'default': String, 'text_hint': String, 'password': True/False, 'multiline': True/False},
+    #           {'type': 'TextInput', 'default': String, 'text_hint': String, 'password': True/False, 'multiline': True/False},
     #           # A textinput field
     #           # Arguments:
     #           #   default:   The text the textinput should hold when building the config UI
@@ -651,7 +813,7 @@ class Widget(ExternalWidget):
     #           #   multiline: If set to True, allows the user to type in multiple lines,       optional, defaults to False
     #           # Will deposit its value as a string.
     #
-    #           {'type': 'num_input', 'default': String, 'text_hint': String, 'password': True/False, 'multiline': True/False, 'decimal': True/False, 'disallow_negative': True/False, 'min': Integer, 'max': Integer},
+    #           {'type': 'NumberInput', 'default': String, 'text_hint': String, 'password': True/False, 'multiline': True/False, 'decimal': True/False, 'disallow_negative': True/False, 'min': Integer, 'max': Integer},
     #           # Same as text_input, but only allows numbers, setting the virtual keyboard layout appropriate
     #           # Arguments:
     #           #   default, text_hint, password and multiline are the same as in text_input
@@ -663,13 +825,13 @@ class Widget(ExternalWidget):
     #           #   max:                The maximal allowed number,                                        optional, no limit by default
     #           # Will deposit its value as a number.
     #
-    #           {'type': 'mail_input', 'default': String, 'text_hint': String, 'password': True/False, 'multiline': True/False},
+    #           {'type': 'MailInput', 'default': String, 'text_hint': String, 'password': True/False, 'multiline': True/False},
     #           # Same as text_input, setting the virtual keyboard layout for mail input
     #           # Arguments:
     #           #   Same as text_input
     #           # Will deposit its value the same as the text_input.
     #
-    #           {'type': 'time_input', 'default': time, 'format': String, 'is24h': True/False},
+    #           {'type': 'TimeInput', 'default': time, 'format': String, 'is24h': True/False},
     #           # An input for hours and minutes
     #           # Arguments:
     #           #   default: The initial time to show, can be a timestamp (e.g. via time.time()) or a string in the following pattern 'hh:mm',        optional, defaults to the current time
@@ -679,28 +841,28 @@ class Widget(ExternalWidget):
     #           #   is24h:   Controls weather the user should input hours from 0 to 24 or from 0 to 12 with am and pm, influences the default format, optional, defaults to True
     #           # Will deposit its value as a string in the format given or 'hh:mm a'.
     #
-    #           {'type': 'date_input', 'default': time, 'format': String},
+    #           {'type': 'DateInput', 'default': time, 'format': String},
     #           # An input for dates; day, month, year
     #           # Arguments:
     #           #   default: Same as time_input, but the string is expected in the format 'dd.MM.yyyy'
     #           #   format:  Same as time_input, but defaults to 'dd.MM.yyyy'
     #           # Will deposit its value as a string in the format given or 'dd.MM.yyyy'.
     #
-    #           {'type': 'web_input', 'default': String, 'text_hint': String, 'password': True/False, 'multiline': True/False},
+    #           {'type': 'WebInput', 'default': String, 'text_hint': String, 'password': True/False, 'multiline': True/False},
     #           # Same as text_input, setting the virtual keyboard layout appropriate
     #           # Arguments:
     #           #   Same as text_input
     #           # Will deposit its value the same as the text_input.
     #
-    #           {'type': 'list_option', 'default': String, 'options': list of strings, 'multioption': True/False},
+    #           {'type': 'ListOption', 'default': String, 'options': list of strings, 'multi_option': True/False},
     #           # Lets the user choose from an list of options
     #           # Arguments:
-    #           #   default:     The initial option to be picked, may or may not be in 'options', optional, defaults to the first element of 'options'
-    #           #   options:     The list of options the user can choose of
-    #           #   multioption: If set to True, the user is able to choose multiple options,     optional, defaults to False
+    #           #   default:      The initial option to be picked, may or may not be in 'options', optional, defaults to the first element of 'options'
+    #           #   options:      The list of options the user can choose of
+    #           #   multi_option: If set to True, the user is able to choose multiple options,     optional, defaults to False
     #           # Will deposit its value as the chosen option string, or the chosen strings separated by ', '
     #
-    #           {'type': 'color_picker', 'default': [r,g,b,a], 'transparent': True/False},
+    #           {'type': 'ColorPicker', 'default': [r,g,b,a], 'transparent': True/False},
     #           # Lets the user pick a color
     #           # Arguments:
     #           #   default:     The initial color as a list of [r,g,b,a], r, g, b and a are numbers from 0 to 255, a is optional and defaults to 255, optional, defaults to [0,0,0,255] (Black)
@@ -737,7 +899,7 @@ class Widget(ExternalWidget):
     def __init__(self, widget_Id):
         '''This function will set the first visual appearance for
         the android widget with the id 'widget_Id'. If this function
-        throws an error, the initialisation is considered as failed
+        throws an error, the initialization is considered as failed
         and the widget will not be created.
         '''
         super(Widget, self).__init__(widget_Id)
@@ -750,7 +912,7 @@ class Widget(ExternalWidget):
         If it's self.Interval_UpdateType, then it is an interval
         update.
         If it's self.Hard_UpdateType, the update was a periodic
-        update triggered trough the defined intervall at
+        update triggered trough the defined interval at
         self.hard_update. This update might have woke up the device.
         '''
         pass
